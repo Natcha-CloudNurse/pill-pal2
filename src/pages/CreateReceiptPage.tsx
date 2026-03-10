@@ -4,8 +4,8 @@ import PageHeader from '@/components/PageHeader';
 import Stepper from '@/components/Stepper';
 import { Button } from '@/components/ui/button';
 import { mockMedications } from '@/data/mockMedications';
-import { Medication, TIME_OF_DAY_LABELS, FOOD_TIMING_LABELS, TimeOfDay } from '@/types/medication';
-import { ChevronLeft, ChevronRight, Minus, Plus, Search, Calendar } from 'lucide-react';
+import { Medication, TIME_OF_DAY_LABELS, FOOD_TIMING_LABELS, TimeOfDay, FrequencyType, TimingEntry, FoodTiming, TIME_OF_DAY_DEFAULTS } from '@/types/medication';
+import { ChevronLeft, ChevronRight, Minus, Plus, Search, Calendar, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import MainLayout from '@/components/MainLayout';
 import BottomSheet from '@/components/BottomSheet';
@@ -66,10 +66,38 @@ const CreateReceiptPage: React.FC = () => {
     }))
   );
 
-  // Stop Medication Modal State
   const [isStopModalOpen, setIsStopModalOpen] = useState(false);
   const [stoppingMedId, setStoppingMedId] = useState<string | null>(null);
   const [stopReason, setStopReason] = useState('');
+
+  // Medication Adjustment Flow State
+  const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
+  const [adjustStep, setAdjustStep] = useState(1);
+  const [adjustingMedId, setAdjustingMedId] = useState<string | null>(null);
+
+  // Adjustment Form State (Sub-step 1: Administration)
+  const [adjAmountPerDose, setAdjAmountPerDose] = useState('1');
+  const [adjDoseUnit, setAdjDoseUnit] = useState('เม็ด');
+  const [adjFrequency, setAdjFrequency] = useState<FrequencyType>('daily');
+  const [adjSpecificDays, setAdjSpecificDays] = useState<number[]>([]);
+  const [adjEveryNDays, setAdjEveryNDays] = useState('3');
+  const [adjTimings, setAdjTimings] = useState<TimingEntry[]>([]);
+  
+  // Adjustment Form State (Sub-step 2: Quantity & Dates)
+  const [adjPrescribedBy, setAdjPrescribedBy] = useState('');
+  const [adjStartDate, setAdjStartDate] = useState(new Date().toISOString().slice(0, 16));
+  const [adjEndDate, setAdjEndDate] = useState('');
+  const [adjCurrentAmount, setAdjCurrentAmount] = useState('0');
+  const [adjAlertDays, setAdjAlertDays] = useState(7);
+  const [adjInstruction, setAdjInstruction] = useState('');
+
+  // Timing Modal State (inside Adjust Modal)
+  const [showAdjTimingDialog, setShowAdjTimingDialog] = useState(false);
+  const [adjTimingFoodTiming, setAdjTimingFoodTiming] = useState<FoodTiming>('after_meal');
+  const [adjTimingTimeOfDay, setAdjTimingTimeOfDay] = useState<TimeOfDay>('morning');
+  const [adjTimingTime, setAdjTimingTime] = useState('08:00');
+  const [adjTimingError, setAdjTimingError] = useState('');
+  const [adjDayNames] = useState(['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส']);
 
   const step1Valid = dateReceived;
   const selectedCount = items.filter(i => i.selected && (i.addedQty > 0 || i.action.includes('หยุดยา'))).length;
@@ -141,6 +169,98 @@ const CreateReceiptPage: React.FC = () => {
     setIsStopModalOpen(false);
     setStoppingMedId(null);
     setStopReason('');
+  };
+
+  // --- Medication Adjustment Logic ---
+  const handleOpenAdjustModal = (item: MedReceiptItem) => {
+    setAdjustingMedId(item.medication.id);
+    setAdjustStep(2); // Start at Step 2 (Administration)
+    
+    // Populate form with current medication data
+    const med = item.medication;
+    setAdjAmountPerDose(med.amountPerDose.toString());
+    setAdjDoseUnit(med.doseUnit);
+    setAdjFrequency(med.frequency);
+    setAdjSpecificDays(med.specificDays || []);
+    setAdjEveryNDays(med.everyNDays?.toString() || '3');
+    setAdjTimings([...med.timings]);
+    
+    setAdjPrescribedBy(med.prescribedBy || '');
+    setAdjStartDate(med.startDate);
+    setAdjEndDate(med.endDate || '');
+    setAdjCurrentAmount(med.currentAmount.toString());
+    setAdjAlertDays(med.alertDays);
+    
+    setIsAdjustModalOpen(true);
+  };
+
+  const handleAddAdjTiming = () => {
+    setAdjTimingError('');
+    
+    if (adjFrequency === 'prn') {
+      const entry: TimingEntry = {
+        id: Math.random().toString(36).substr(2, 9),
+        timeOfDay: 'unspecified',
+        foodTiming: adjTimingFoodTiming,
+        time: null,
+      };
+      setAdjTimings(prev => [...prev, entry]);
+      setShowAdjTimingDialog(false);
+      return;
+    }
+
+    // Check duplicate
+    const duplicate = adjTimings.find(
+      t => t.time === adjTimingTime && t.timeOfDay === adjTimingTimeOfDay && t.foodTiming === adjTimingFoodTiming
+    );
+    if (duplicate) {
+      setAdjTimingError('เวลาที่เลือกซ้ำกัน');
+      return;
+    }
+
+    const entry: TimingEntry = {
+      id: Math.random().toString(36).substr(2, 9),
+      timeOfDay: adjTimingTimeOfDay,
+      foodTiming: adjTimingFoodTiming,
+      time: adjTimingTimeOfDay === 'unspecified' ? null : adjTimingTime,
+    };
+    setAdjTimings(prev => [...prev, entry]);
+    setShowAdjTimingDialog(false);
+  };
+
+  const removeAdjTiming = (id: string) => {
+    setAdjTimings(prev => prev.filter(t => t.id !== id));
+  };
+
+  const handleSaveAdjustment = () => {
+    if (!adjustingMedId) return;
+
+    setItems(prev => prev.map(item => {
+      if (item.medication.id === adjustingMedId) {
+        const updatedMed: Medication = {
+          ...item.medication,
+          amountPerDose: Number(adjAmountPerDose),
+          doseUnit: adjDoseUnit,
+          frequency: adjFrequency,
+          specificDays: adjFrequency === 'specific_days' ? adjSpecificDays : undefined,
+          everyNDays: adjFrequency === 'every_n_days' ? Number(adjEveryNDays) : undefined,
+          timings: adjTimings,
+          prescribedBy: adjPrescribedBy || undefined,
+          startDate: adjStartDate,
+          endDate: adjEndDate || undefined,
+          currentAmount: Number(adjCurrentAmount),
+          alertDays: adjAlertDays,
+        };
+        
+        const newAction = [...item.action.filter(a => a !== 'แก้ไขข้อมูล/วิธีการให้ยา'), 'แก้ไขข้อมูล/วิธีการให้ยา'];
+        return { ...item, medication: updatedMed, action: newAction, selected: true };
+      }
+      return item;
+    }));
+
+    setIsAdjustModalOpen(false);
+    setAdjustingMedId(null);
+    toast.success('ปรับปรุงข้อมูลยาเรียบร้อยแล้ว');
   };
 
   return (
@@ -351,8 +471,18 @@ const CreateReceiptPage: React.FC = () => {
                               {item.medication.name} {item.medication.strength}{item.medication.strengthUnit}
                             </h4>
                             <div className="flex items-center gap-2">
+                              {item.action.includes('แก้ไขข้อมูล/วิธีการให้ยา') && (
+                                <span className="bg-[#f0f9ff] text-[#0ea5e9] text-[10px] px-2 py-0.5 rounded-full font-bold border border-[#bae6fd]">
+                                  แก้ไขแล้ว
+                                </span>
+                              )}
                               {medTab === 'current' && (
-                                <button className="text-xs text-[#a855f7] font-bold whitespace-nowrap hover:underline">ปรับการให้ยา</button>
+                                <button 
+                                  onClick={() => handleOpenAdjustModal(item)}
+                                  className="text-xs text-[#a855f7] font-bold whitespace-nowrap hover:underline"
+                                >
+                                  ปรับการให้ยา
+                                </button>
                               )}
                             </div>
                           </div>
@@ -453,7 +583,7 @@ const CreateReceiptPage: React.FC = () => {
           const actionLabelMap: Record<string, string> = {
             'รายการใหม่': 'รายการใหม่',
             'เพิ่มจำนวนยา': 'เพิ่มจำนวนยา',
-            'แก้ไขข้อมูล/วิธีการให้ยา': 'แก้ไขข้อมูล/วิธีการให้ยา',
+            'แก้ไขข้อมูล/วิธีการให้ยา': 'แก้ไขข้อมูล / วิธีการให้ยา',
             'หยุดยา': 'หยุดยา',
           };
 
@@ -714,6 +844,339 @@ const CreateReceiptPage: React.FC = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Adjust Medication Bottom Sheet */}
+      <BottomSheet 
+        open={isAdjustModalOpen} 
+        onOpenChange={setIsAdjustModalOpen} 
+        title={adjustStep === 2 ? "แก้ไขรายการยา" : "เพิ่มรายการยา"}
+      >
+        <div className="px-1 pb-6">
+          {/* Internal Stepper */}
+          <div className="flex items-center justify-center gap-4 py-4 mb-4">
+            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-bold bg-[#009292] text-white`}>1</div>
+            <div className={`h-1 w-12 rounded bg-[#009292]`} />
+            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-bold ${adjustStep >= 2 ? 'bg-[#009292] text-white' : 'bg-slate-100 text-slate-400'}`}>2</div>
+            <div className={`h-1 w-12 rounded ${adjustStep >= 3 ? 'bg-[#009292]' : 'bg-slate-100'}`} />
+            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-bold ${adjustStep >= 3 ? 'bg-[#009292] text-white' : 'bg-slate-100 text-slate-400'}`}>3</div>
+          </div>
+
+          <div className="flex items-center gap-2 mb-6">
+            <button onClick={() => adjustStep > 2 && setAdjustStep(prev => prev - 1)} className="p-1">
+              <ChevronLeft className="h-5 w-5 text-[#009292]" />
+            </button>
+            <h3 className="text-[#1a8e89] font-bold text-lg">
+              {adjustStep === 2 ? 'ข้อมูลการให้ยา' : 'ข้อมูลจำนวนและวันให้ยา'}
+            </h3>
+          </div>
+
+          <div className="border border-[#c7d2fe] rounded-3xl p-5 border-l-8 border-l-[#a5b4fc] relative overflow-hidden">
+            {adjustStep === 2 ? (
+              <div className="space-y-6">
+                <div className="relative">
+                  <h4 className="text-[#6366f1] font-bold text-sm mb-4 border-b border-[#e2e8f0] pb-2 uppercase tracking-wide">ขนาดและปริมาณยา</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-bold text-[#334155] mb-2 block">ปริมาณต่อครั้ง <span className="text-destructive">*</span></label>
+                      <input 
+                        type="number" 
+                        value={adjAmountPerDose}
+                        onChange={e => setAdjAmountPerDose(e.target.value)}
+                        className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20 text-lg font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-bold text-[#334155] mb-3 block">หน่วย <span className="text-destructive">*</span></label>
+                      <div className="grid grid-cols-4 gap-2">
+                        {['แคปซูล', 'เม็ด', 'หยด', 'mL', 'ซอง', 'หน่วย', 'U/mL', 'แผ่น'].map(unit => (
+                          <button
+                            key={unit}
+                            onClick={() => setAdjDoseUnit(unit)}
+                            className={`py-2 px-1 rounded-2xl text-xs font-bold transition-all ${adjDoseUnit === unit ? 'bg-[#1a8e89] text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                          >
+                            {unit}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="relative pt-2">
+                  <h4 className="text-[#6366f1] font-bold text-sm mb-4 border-b border-[#e2e8f0] pb-2 uppercase tracking-wide">ความถี่</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-bold text-[#334155] mb-3 block">ความถี่ <span className="text-destructive">*</span></label>
+                      <div className="flex flex-wrap gap-2">
+                        {(['daily', 'specific_days', 'prn', 'every_n_days'] as FrequencyType[]).map(f => (
+                          <button 
+                            key={f}
+                            onClick={() => { setAdjFrequency(f); if (f === 'prn') setAdjTimings([]); }}
+                            className={`px-4 py-2.5 rounded-2xl text-[13px] font-bold transition-all ${adjFrequency === f ? 'bg-[#1a8e89] text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                          >
+                            {f === 'daily' ? 'ทุกวัน' : f === 'specific_days' ? 'เฉพาะบางวัน' : f === 'prn' ? 'เมื่อมีอาการ (PRN)' : 'ทุก…วัน'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {adjFrequency === 'specific_days' && (
+                      <div className="pt-2 animate-in fade-in slide-in-from-top-2">
+                        <label className="text-sm font-bold text-[#334155] mb-3 block">เฉพาะบางวัน</label>
+                        <div className="flex justify-between gap-1">
+                          {adjDayNames.map((d, i) => (
+                            <button 
+                              key={i} 
+                              onClick={() => setAdjSpecificDays(prev => prev.includes(i) ? prev.filter(x => x !== i) : [...prev, i])}
+                              className={`h-10 w-10 rounded-full text-xs font-bold transition-all ${
+                                adjSpecificDays.includes(i) ? 'bg-[#1a8e89] text-white shadow-md' : 'bg-slate-100 text-slate-400'
+                              }`}
+                            >
+                              {d}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {adjFrequency === 'every_n_days' && (
+                      <div className="pt-2 animate-in fade-in slide-in-from-top-2">
+                        <label className="text-sm font-bold text-[#334155] mb-2 block">ทุกกี่วัน</label>
+                        <div className="relative">
+                          <input 
+                            type="number" 
+                            min="1" 
+                            value={adjEveryNDays} 
+                            onChange={e => setAdjEveryNDays(e.target.value)}
+                            className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:outline-none font-medium" 
+                          />
+                          <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">วัน</div>
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="text-sm font-bold text-[#334155] mb-2 block">เวลา <span className="text-destructive">*</span></label>
+                      <div className="space-y-2 mb-2">
+                        {adjTimings.map(t => (
+                          <div key={t.id} className="flex items-center justify-between bg-white border-2 border-slate-100 rounded-2xl p-3 shadow-sm">
+                            <span className="font-bold text-slate-700">
+                              {t.time && `${t.time} `}
+                              <span className="text-slate-400 font-medium text-sm">
+                                ({TIME_OF_DAY_LABELS[t.timeOfDay]}/{FOOD_TIMING_LABELS[t.foodTiming]})
+                              </span>
+                            </span>
+                            <button onClick={() => removeAdjTiming(t.id)} className="text-destructive p-1">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <button 
+                        onClick={() => {
+                          setShowAdjTimingDialog(true);
+                          if (adjFrequency === 'prn') setAdjTimingTimeOfDay('unspecified');
+                          else {
+                            setAdjTimingTimeOfDay('morning');
+                            setAdjTimingTime(TIME_OF_DAY_DEFAULTS.morning[adjTimingFoodTiming] || '08:00');
+                          }
+                        }}
+                        className="w-full py-3 bg-[#f3f0ff] border-2 border-dashed border-[#d8b4fe] rounded-2xl text-[#a855f7] font-bold flex items-center justify-center gap-2"
+                      >
+                        <Plus className="h-4 w-4" /> เพิ่มเวลา
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="relative pt-2">
+                  <h4 className="text-[#6366f1] font-bold text-sm mb-4 border-b border-[#e2e8f0] pb-2 uppercase tracking-wide">คำอธิบายหรือคำแนะนำ</h4>
+                  <Textarea 
+                    placeholder="ระบุรายละเอียด"
+                    value={adjInstruction}
+                    onChange={e => setAdjInstruction(e.target.value)}
+                    className="w-full rounded-2xl border-2 border-slate-100 focus:ring-0 focus:border-slate-200 min-h-[100px] text-sm font-medium"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div className="relative">
+                  <h4 className="text-[#6366f1] font-bold text-sm mb-4 border-b border-[#e2e8f0] pb-2 uppercase tracking-wide">ระยะเวลาให้ยา</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-bold text-[#334155] mb-2 block">ผู้สั่งยา</label>
+                      <input 
+                        value={adjPrescribedBy}
+                        onChange={e => setAdjPrescribedBy(e.target.value)}
+                        placeholder="หมอวิชัย"
+                        className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20 font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-bold text-[#334155] mb-2 block">วันที่เริ่มให้ยา <span className="text-destructive">*</span></label>
+                      <div className="relative">
+                        <input 
+                          type="datetime-local" 
+                          value={adjStartDate}
+                          onChange={e => setAdjStartDate(e.target.value)}
+                          className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:outline-none font-medium text-sm"
+                        />
+                        <div className="absolute right-0 top-0 h-full w-12 bg-[#1a8e89] rounded-r-2xl flex items-center justify-center pointer-events-none">
+                          <Calendar className="h-5 w-5 text-white" />
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-bold text-[#334155] mb-2 block">วันที่สิ้นสุดให้ยา (ถ้ามี)</label>
+                      <div className="relative">
+                        <input 
+                          type="datetime-local" 
+                          value={adjEndDate}
+                          onChange={e => setAdjEndDate(e.target.value)}
+                          className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:outline-none font-medium text-sm"
+                        />
+                        <div className="absolute right-0 top-0 h-full w-12 bg-[#1a8e89] rounded-r-2xl flex items-center justify-center pointer-events-none">
+                          <Calendar className="h-5 w-5 text-white" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="relative pt-2">
+                  <h4 className="text-[#6366f1] font-bold text-sm mb-4 border-b border-[#e2e8f0] pb-2 uppercase tracking-wide">ข้อมูลจำนวนยา</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-bold text-[#334155] mb-2 block">จำนวนยาปัจจุบัน</label>
+                      <div className="flex gap-0 border-2 border-slate-100 rounded-2xl overflow-hidden">
+                        <input 
+                          type="number" 
+                          value={adjCurrentAmount}
+                          onChange={e => setAdjCurrentAmount(e.target.value)}
+                          className="flex-1 px-4 py-3 focus:outline-none font-bold text-xl text-slate-700"
+                        />
+                        <div className="flex flex-col border-l-2 border-slate-100">
+                          <button onClick={() => setAdjCurrentAmount(prev => (Number(prev) + 1).toString())} className="px-3 bg-[#1a8e89] text-white flex-1 hover:bg-[#167d79]">
+                            <ChevronRight className="h-4 w-4 -rotate-90" />
+                          </button>
+                          <button onClick={() => setAdjCurrentAmount(prev => Math.max(0, Number(prev) - 1).toString())} className="px-3 bg-[#1a8e89] text-white flex-1 border-t border-white/20 hover:bg-[#167d79]">
+                            <ChevronRight className="h-4 w-4 rotate-90" />
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-2 font-medium">หน่วย : {adjDoseUnit}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-bold text-[#334155] mb-2 block">แจ้งเตือนเมื่อเหลือพอใช้ (วัน)</label>
+                      <select 
+                        value={adjAlertDays}
+                        onChange={e => setAdjAlertDays(Number(e.target.value))}
+                        className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:outline-none font-medium text-sm bg-white appearance-none"
+                      >
+                        <option value={1}>1 วัน</option>
+                        <option value={3}>3 วัน</option>
+                        <option value={7}>7 วัน</option>
+                        <option value={14}>14 วัน</option>
+                        <option value={30}>30 วัน</option>
+                      </select>
+                      <p className="text-[11px] text-slate-400 mt-2 text-center italic">
+                        เมื่อยาคงเหลือพอใช้ได้ตามจำนวนวันที่ตั้งค่า<br />
+                        สถานะจะเป็น "ใกล้หมด"
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-4 mt-8">
+            <Button 
+              variant="outline" 
+              onClick={() => adjustStep === 2 ? setIsAdjustModalOpen(false) : setAdjustStep(2)}
+              className="flex-1 h-14 rounded-2xl bg-slate-50 border-0 text-slate-400 font-bold hover:bg-slate-100"
+            >
+              ยกเลิก
+            </Button>
+            <Button 
+              onClick={() => adjustStep === 2 ? setAdjustStep(3) : handleSaveAdjustment()}
+              className="flex-1 h-14 rounded-2xl bg-[#1a8e89] hover:bg-[#167d79] text-white font-bold flex items-center justify-center gap-2 shadow-lg shadow-teal-100"
+            >
+              {adjustStep === 2 ? 'ถัดไป' : 'บันทึก'} <ChevronRight className="h-5 w-5" />
+            </Button>
+          </div>
+        </div>
+      </BottomSheet>
+
+      {/* Adjustment Timing Modal */}
+      {showAdjTimingDialog && (
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-0" onClick={() => setShowAdjTimingDialog(false)}>
+          <div className="w-full max-w-md bg-white rounded-t-[2.5rem] p-8 space-y-8 animate-in slide-in-from-bottom" onClick={e => e.stopPropagation()}>
+             <div className="flex items-center justify-between">
+               <h3 className="text-xl font-bold text-slate-800">เพิ่มเวลาให้ยา</h3>
+               <button onClick={() => setShowAdjTimingDialog(false)} className="p-2 bg-slate-50 rounded-full">
+                 <Trash2 className="h-5 w-5 text-slate-400" />
+               </button>
+             </div>
+
+             <div className="space-y-4">
+               <label className="text-sm font-bold text-[#334155]">เวลาให้ยาสัมพันธ์กับมื้ออาหาร <span className="text-destructive">*</span></label>
+               <div className="flex flex-wrap gap-2">
+                 {(['before_meal', 'with_meal', 'after_meal', 'unspecified'] as FoodTiming[]).map(ft => (
+                   <button 
+                     key={ft} 
+                     onClick={() => setAdjTimingFoodTiming(ft)}
+                     className={`px-6 py-2.5 rounded-2xl text-sm font-bold transition-all ${adjTimingFoodTiming === ft ? 'bg-[#1a8e89] text-white' : 'bg-slate-100 text-slate-500'}`}
+                   >
+                     {FOOD_TIMING_LABELS[ft]}
+                   </button>
+                 ))}
+               </div>
+             </div>
+
+             {adjFrequency !== 'prn' && (
+               <div className="space-y-4">
+                 <label className="text-sm font-bold text-[#334155]">เลือกช่วงเวลา <span className="text-destructive">*</span></label>
+                 <div className="flex flex-wrap gap-2">
+                   {(['morning', 'noon', 'evening', 'bedtime', 'other', 'unspecified'] as TimeOfDay[]).map(tod => (
+                     <button 
+                       key={tod} 
+                       onClick={() => {
+                         setAdjTimingTimeOfDay(tod);
+                         const def = TIME_OF_DAY_DEFAULTS[tod]?.[adjTimingFoodTiming];
+                         if (def) setAdjTimingTime(def);
+                       }}
+                       className={`px-6 py-2.5 rounded-2xl text-sm font-bold transition-all ${adjTimingTimeOfDay === tod ? 'bg-[#1a8e89] text-white' : 'bg-slate-100 text-slate-500'}`}
+                     >
+                       {TIME_OF_DAY_LABELS[tod]}
+                     </button>
+                   ))}
+                 </div>
+                 
+                 {adjTimingTimeOfDay !== 'unspecified' && (
+                   <div className="pt-2">
+                     <label className="text-sm font-bold text-[#334155] mb-2 block">ระบุเวลา <span className="text-destructive">*</span></label>
+                     <input 
+                       type="time" 
+                       value={adjTimingTime}
+                       onChange={e => setAdjTimingTime(e.target.value)}
+                       className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 text-xl font-bold text-slate-700" 
+                     />
+                   </div>
+                 )}
+               </div>
+             )}
+
+             {adjTimingError && <p className="text-sm text-destructive font-medium">{adjTimingError}</p>}
+
+             <div className="flex gap-4 pt-4">
+               <Button variant="outline" className="flex-1 h-16 rounded-2xl text-slate-400 font-bold border-0 bg-slate-50" onClick={() => setShowAdjTimingDialog(false)}>ยกเลิก</Button>
+               <Button className="flex-1 h-16 rounded-2xl bg-[#1a8e89] font-bold text-white shadow-lg shadow-teal-100" onClick={handleAddAdjTiming}>เพิ่ม</Button>
+             </div>
+          </div>
+        </div>
+      )}
     </MainLayout>
   );
 };
