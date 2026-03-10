@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 98%;
+    --foreground: 210 25% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 210 25% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 25% 15%;
+
+    --primary: 174 62% 38%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 174 40% 94%;
+    --secondary-foreground: 174 62% 28%;
+
+    --muted: 210 20% 96%;
+    --muted-foreground: 215 14% 46%;
+
+    --accent: 174 40% 94%;
+    --accent-foreground: 174 62% 28%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 20% 90%;
+    --input: 210 20% 90%;
+    --ring: 174 62% 38%;
+
+    --radius: 0.75rem;
+
+    --med-teal: 174 62% 38%;
+    --med-teal-light: 174 40% 94%;
+    --med-warning: 36 100% 50%;
+    --med-danger: 0 87% 59%;
+    --med-info: 210 90% 56%;
+    --med-success: 142 71% 45%;
+
+    --chip-morning: 45 100% 85%;
+    --chip-noon: 45 100% 71%;
+    --chip-evening: 199 70% 85%;
+    --chip-bedtime: 270 47% 85%;
+    --chip-other: 215 25% 90%;
+
+    --stock-normal: 142 71% 45%;
+    --stock-low: 36 100% 50%;
+    --stock-out: 210 90% 56%;
+    --stock-suspended: 215 14% 70%;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 174 62% 38%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 174 40% 94%;
+    --sidebar-accent-foreground: 174 62% 28%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 174 62% 38%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Sarabun', sans-serif;
+  }
+}
+
+@layer utilities {
+  @keyframes pulse-subtle {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+  .animate-pulse-subtle {
+    animation: pulse-subtle 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+}
