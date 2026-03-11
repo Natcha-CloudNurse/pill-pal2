@@ -34,6 +34,7 @@ export interface Medication {
   stoppedDate?: string;
   stoppedBy?: string;
   expirationDate?: string;
+  instruction?: string;
 }
 
 export interface EmergencyContact {

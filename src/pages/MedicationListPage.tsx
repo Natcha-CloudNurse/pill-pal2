@@ -3,17 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import MedicationCard from '@/components/MedicationCard';
 import BottomSheet from '@/components/BottomSheet';
 import { mockMedications } from '@/data/mockMedications';
-import { Medication } from '@/types/medication';
+import { Medication, TIME_OF_DAY_LABELS, FOOD_TIMING_LABELS, TimeOfDay, FrequencyType, TimingEntry, FoodTiming, TIME_OF_DAY_DEFAULTS, MedicationStatus } from '@/types/medication';
 import {
   Search, LayoutGrid, Plus, Pill, FileText,
-  ChevronLeft, MoreVertical, Activity, Accessibility,
+  ChevronLeft, ChevronRight, MoreVertical, Activity, Accessibility,
   MessageCircle, Link2, FileCheck, Droplets, Utensils,
   Trash2, Home, Users, Box, Calendar, RefreshCw,
   Settings, LogOut, Cloud
 } from 'lucide-react';
 import MainLayout from '@/components/MainLayout';
 import { Button } from '@/components/ui/button';
-
+import { Textarea } from '@/components/ui/textarea';
+import { toast } from 'sonner';
 
 const MedicationListPage: React.FC = () => {
   const navigate = useNavigate();
@@ -62,7 +63,6 @@ const MedicationListPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Quick action icons (Scrollable on mobile) */}
           <div className="flex gap-4 md:gap-8 overflow-x-auto pb-2 scrollbar-hide justify-between md:justify-start">
             {[
               { icon: <Activity className="h-6 w-6" />, label: 'สัญญาณชีพ', bg: 'bg-white', color: 'text-blue-500', border: 'border-2 border-blue-100' },
@@ -85,7 +85,6 @@ const MedicationListPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Sub tabs */}
         <div className="bg-white px-4 md:px-8 py-4 border-b border-border/50">
           <div className="flex gap-3 overflow-x-auto pb-2 hide-scrollbar">
             {['ภาพรวม', 'บันทึกการดูแล', 'เอกสาร', 'รายการยา'].map(tab => (
@@ -105,9 +104,7 @@ const MedicationListPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Content Body Area */}
         <div className="flex-1 w-full mx-auto px-4 md:px-8 py-6">
-          {/* Search + Manage Desktop */}
           <div className="flex flex-col md:flex-row items-center gap-4 mb-6">
             <div className="flex-1 w-full relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
@@ -124,7 +121,6 @@ const MedicationListPage: React.FC = () => {
             </Button>
           </div>
 
-          {/* Current / Stopped tabs (Pill style matching reference) */}
           <div className="flex items-center gap-3 mb-6 relative z-0">
             <button
               onClick={() => setActiveTab('current')}
@@ -138,7 +134,7 @@ const MedicationListPage: React.FC = () => {
             <button
               onClick={() => setActiveTab('stopped')}
               className={`px-5 py-2 rounded-full border text-sm font-medium transition-colors ${activeTab === 'stopped'
-                ? 'bg-white text-slate-500 border-slate-300 hover:bg-slate-50'
+                ? 'bg-teal-600 text-white border-teal-600'
                 : 'bg-white text-slate-500 border-slate-300 hover:bg-slate-50'
                 }`}
             >
@@ -146,7 +142,6 @@ const MedicationListPage: React.FC = () => {
             </button>
           </div>
 
-          {/* Medication Cards container */}
           <div className="space-y-4 pb-24 md:pb-8">
             {filteredMeds.map(med => (
               <MedicationCard
@@ -166,7 +161,6 @@ const MedicationListPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Sheets remain essentially the same */}
       <BottomSheet open={manageSheetOpen} onOpenChange={setManageSheetOpen} title="จัดการยา">
         <div className="space-y-1">
           <button

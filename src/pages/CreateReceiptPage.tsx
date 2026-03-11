@@ -4,7 +4,7 @@ import PageHeader from '@/components/PageHeader';
 import Stepper from '@/components/Stepper';
 import { Button } from '@/components/ui/button';
 import { mockMedications } from '@/data/mockMedications';
-import { Medication, TIME_OF_DAY_LABELS, FOOD_TIMING_LABELS, TimeOfDay, FrequencyType, TimingEntry, FoodTiming, TIME_OF_DAY_DEFAULTS } from '@/types/medication';
+import { Medication, TIME_OF_DAY_LABELS, FOOD_TIMING_LABELS, TimeOfDay, FrequencyType, TimingEntry, FoodTiming, TIME_OF_DAY_DEFAULTS, MedicationStatus, ReceiptAction } from '@/types/medication';
 import { ChevronLeft, ChevronRight, Minus, Plus, Search, Calendar, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import MainLayout from '@/components/MainLayout';
@@ -70,10 +70,19 @@ const CreateReceiptPage: React.FC = () => {
   const [stoppingMedId, setStoppingMedId] = useState<string | null>(null);
   const [stopReason, setStopReason] = useState('');
 
-  // Medication Adjustment Flow State
+  // Medication Adjustment & Re-creation Flow State
   const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
   const [adjustStep, setAdjustStep] = useState(1);
   const [adjustingMedId, setAdjustingMedId] = useState<string | null>(null);
+  const [isRecreatingMode, setIsRecreatingMode] = useState(false);
+  const [isRecreateConfirmOpen, setIsRecreateConfirmOpen] = useState(false);
+  const [recreatingMedTemplate, setRecreatingMedTemplate] = useState<Medication | null>(null);
+
+  // Step 1 Form State (Basic Info) - for re-creation
+  const [adjName, setAdjName] = useState('');
+  const [adjStrength, setAdjStrength] = useState('');
+  const [adjStrengthUnit, setAdjStrengthUnit] = useState('');
+  const [adjAdminMethod, setAdjAdminMethod] = useState('');
 
   // Adjustment Form State (Sub-step 1: Administration)
   const [adjAmountPerDose, setAdjAmountPerDose] = useState('1');
@@ -90,6 +99,9 @@ const CreateReceiptPage: React.FC = () => {
   const [adjCurrentAmount, setAdjCurrentAmount] = useState('0');
   const [adjAlertDays, setAdjAlertDays] = useState(7);
   const [adjInstruction, setAdjInstruction] = useState('');
+  const [adjStatus, setAdjStatus] = useState<MedicationStatus>('active');
+  const [adjExpirationDate, setAdjExpirationDate] = useState('');
+  const [originalMed, setOriginalMed] = useState<Medication | null>(null);
 
   // Timing Modal State (inside Adjust Modal)
   const [showAdjTimingDialog, setShowAdjTimingDialog] = useState(false);
@@ -171,13 +183,23 @@ const CreateReceiptPage: React.FC = () => {
     setStopReason('');
   };
 
-  // --- Medication Adjustment Logic ---
-  const handleOpenAdjustModal = (item: MedReceiptItem) => {
+  // --- Medication Adjustment & Re-creation Logic ---
+  const handleOpenAdjustModal = (item: MedReceiptItem, isRecreate = false) => {
+    setIsRecreatingMode(isRecreate);
     setAdjustingMedId(item.medication.id);
-    setAdjustStep(2); // Start at Step 2 (Administration)
     
-    // Populate form with current medication data
+    // Populate form with medication data
     const med = item.medication;
+    
+    // Set Step 1 fields
+    setAdjName(med.name);
+    setAdjStrength(med.strength);
+    setAdjStrengthUnit(med.strengthUnit);
+    setAdjAdminMethod(med.administrationMethod);
+
+    // For recreations, start at Step 1. For adjustments, start at Step 2 (Administration)
+    setAdjustStep(isRecreate ? 1 : 2);
+    
     setAdjAmountPerDose(med.amountPerDose.toString());
     setAdjDoseUnit(med.doseUnit);
     setAdjFrequency(med.frequency);
@@ -186,12 +208,41 @@ const CreateReceiptPage: React.FC = () => {
     setAdjTimings([...med.timings]);
     
     setAdjPrescribedBy(med.prescribedBy || '');
-    setAdjStartDate(med.startDate);
+    // For recreate, default to now. For adjust, keep original.
+    setAdjStartDate(isRecreate ? new Date().toISOString().slice(0, 16) : med.startDate);
     setAdjEndDate(med.endDate || '');
     setAdjCurrentAmount(med.currentAmount.toString());
     setAdjAlertDays(med.alertDays);
+    setAdjStatus(med.status);
+    setAdjExpirationDate(med.expirationDate || '');
+    setAdjInstruction(med.instruction || ''); // Ensure instruction is pre-filled if available
+    setOriginalMed({ ...med });
     
     setIsAdjustModalOpen(true);
+  };
+
+  const handleOpenRecreateConfirm = (medication: Medication) => {
+    setRecreatingMedTemplate(medication);
+    setIsRecreateConfirmOpen(true);
+  };
+
+  const handleConfirmRecreate = () => {
+    if (!recreatingMedTemplate) return;
+    setIsRecreateConfirmOpen(false);
+    
+    // Find the item if it exists, or create a dummy one to pass to handleOpenAdjustModal
+    const existingItem = items.find(i => i.medication.id === recreatingMedTemplate.id);
+    if (existingItem) {
+      handleOpenAdjustModal(existingItem, true);
+    } else {
+      handleOpenAdjustModal({ 
+        medication: recreatingMedTemplate, 
+        selected: false, 
+        addedQty: 0, 
+        action: [] 
+      }, true);
+    }
+    setRecreatingMedTemplate(null);
   };
 
   const handleAddAdjTiming = () => {
@@ -233,34 +284,85 @@ const CreateReceiptPage: React.FC = () => {
   };
 
   const handleSaveAdjustment = () => {
-    if (!adjustingMedId) return;
+    if (!adjustingMedId || !originalMed) return;
 
-    setItems(prev => prev.map(item => {
-      if (item.medication.id === adjustingMedId) {
-        const updatedMed: Medication = {
-          ...item.medication,
-          amountPerDose: Number(adjAmountPerDose),
-          doseUnit: adjDoseUnit,
-          frequency: adjFrequency,
-          specificDays: adjFrequency === 'specific_days' ? adjSpecificDays : undefined,
-          everyNDays: adjFrequency === 'every_n_days' ? Number(adjEveryNDays) : undefined,
-          timings: adjTimings,
-          prescribedBy: adjPrescribedBy || undefined,
-          startDate: adjStartDate,
-          endDate: adjEndDate || undefined,
-          currentAmount: Number(adjCurrentAmount),
-          alertDays: adjAlertDays,
-        };
-        
-        const newAction = [...item.action.filter(a => a !== 'แก้ไขข้อมูล/วิธีการให้ยา'), 'แก้ไขข้อมูล/วิธีการให้ยา'];
-        return { ...item, medication: updatedMed, action: newAction, selected: true };
-      }
-      return item;
-    }));
+    if (isRecreatingMode) {
+      const newMed: Medication = {
+        ...originalMed,
+        id: Math.random().toString(36).substr(2, 9), // New ID for re-created med
+        name: adjName,
+        strength: adjStrength,
+        strengthUnit: adjStrengthUnit,
+        administrationMethod: adjAdminMethod,
+        amountPerDose: Number(adjAmountPerDose),
+        doseUnit: adjDoseUnit,
+        frequency: adjFrequency,
+        specificDays: adjFrequency === 'specific_days' ? adjSpecificDays : undefined,
+        everyNDays: adjFrequency === 'every_n_days' ? Number(adjEveryNDays) : undefined,
+        timings: adjTimings,
+        prescribedBy: adjPrescribedBy || undefined,
+        startDate: adjStartDate,
+        endDate: adjEndDate || undefined,
+        currentAmount: Number(adjCurrentAmount),
+        alertDays: adjAlertDays,
+        status: 'active', // Force active for re-created med
+        expirationDate: adjExpirationDate || undefined,
+      };
+
+      const newItem: MedReceiptItem = {
+        medication: newMed,
+        selected: true,
+        addedQty: Number(adjCurrentAmount), // Initial amount
+        action: ['new'],
+      };
+
+      setItems(prev => [newItem, ...prev]);
+      toast.success('เพิ่มรายการใหม่จากข้อมูลเดิมเรียบร้อยแล้ว');
+    } else {
+      setItems(prev => prev.map(item => {
+        if (item.medication.id === adjustingMedId) {
+          const updatedMed: Medication = {
+            ...item.medication,
+            amountPerDose: Number(adjAmountPerDose),
+            doseUnit: adjDoseUnit,
+            frequency: adjFrequency,
+            specificDays: adjFrequency === 'specific_days' ? adjSpecificDays : undefined,
+            everyNDays: adjFrequency === 'every_n_days' ? Number(adjEveryNDays) : undefined,
+            timings: adjTimings,
+            prescribedBy: adjPrescribedBy || undefined,
+            startDate: adjStartDate,
+            endDate: adjEndDate || undefined,
+            currentAmount: Number(adjCurrentAmount),
+            alertDays: adjAlertDays,
+            status: adjStatus,
+            expirationDate: adjExpirationDate || undefined,
+          };
+          
+          // Generate change log
+          const logEntries: string[] = [];
+          if (originalMed.amountPerDose !== updatedMed.amountPerDose) logEntries.push(`ปรับปริมาณ: ${originalMed.amountPerDose} -> ${updatedMed.amountPerDose}`);
+          if (originalMed.frequency !== updatedMed.frequency) logEntries.push('ปรับความถี่');
+          if (originalMed.currentAmount !== updatedMed.currentAmount) logEntries.push(`ปรับจำนวนยา: ${originalMed.currentAmount} -> ${updatedMed.currentAmount}`);
+          if (originalMed.status !== updatedMed.status) logEntries.push(`เปลี่ยนสถานะ: ${originalMed.status === 'active' ? 'ให้ยาปกติ' : 'หยุดยา'} -> ${updatedMed.status === 'active' ? 'ให้ยาปกติ' : 'หยุดยา'}`);
+
+          const newAction = [...item.action.filter(a => a !== 'edited'), 'edited'];
+          return { 
+            ...item, 
+            medication: updatedMed, 
+            action: newAction as ReceiptAction[],
+            selected: true,
+            reason: logEntries.join(', ') || item.reason
+          };
+        }
+        return item;
+      }));
+      toast.success('ปรับปรุงข้อมูลยาเรียบร้อยแล้ว');
+    }
 
     setIsAdjustModalOpen(false);
     setAdjustingMedId(null);
-    toast.success('ปรับปรุงข้อมูลยาเรียบร้อยแล้ว');
+    setOriginalMed(null);
+    setIsRecreatingMode(false);
   };
 
   return (
@@ -297,12 +399,12 @@ const CreateReceiptPage: React.FC = () => {
         {step < 2 ? (
           <Button size="sm" onClick={() => setStep(step + 1)}
             disabled={step === 0 ? !step1Valid : selectedCount === 0}
-            className="gap-1">
+            className="gap-1 px-5 h-9 bg-teal-500 hover:bg-teal-600">
             ถัดไป <ChevronRight className="h-4 w-4" />
           </Button>
         ) : (
-          <Button size="sm" onClick={handleSave} className="gap-1">
-            ถัดไป <ChevronRight className="h-4 w-4" />
+          <Button size="sm" onClick={handleSave} className="gap-1 px-8 h-9 bg-teal-600 hover:bg-teal-700">
+            ยืนยัน
           </Button>
         )}
       </div>
@@ -451,17 +553,7 @@ const CreateReceiptPage: React.FC = () => {
                             </p>
                           </div>
 
-                          <div className="pt-3">
-                            <button
-                              onClick={() => {
-                                const newAction = item.action.filter(a => a !== 'หยุดยา');
-                                updateItem(item.medication.id, { action: newAction });
-                              }}
-                              className="text-xs px-5 py-2 rounded-xl font-bold bg-white border border-slate-200 text-slate-400 hover:bg-slate-50 transition-all shadow-sm"
-                            >
-                              ยกเลิกการหยุดยา
-                            </button>
-                          </div>
+                          {/* Removed ยกเลิกการหยุดยา button as per request */}
                         </div>
                       ) : (
                         /* ACTIVE CARD LAYOUT */
@@ -471,7 +563,7 @@ const CreateReceiptPage: React.FC = () => {
                               {item.medication.name} {item.medication.strength}{item.medication.strengthUnit}
                             </h4>
                             <div className="flex items-center gap-2">
-                              {item.action.includes('แก้ไขข้อมูล/วิธีการให้ยา') && (
+                              {item.action.includes('edited') && (
                                 <span className="bg-[#f0f9ff] text-[#0ea5e9] text-[10px] px-2 py-0.5 rounded-full font-bold border border-[#bae6fd]">
                                   แก้ไขแล้ว
                                 </span>
@@ -485,6 +577,11 @@ const CreateReceiptPage: React.FC = () => {
                                 </button>
                               )}
                             </div>
+                            {item.reason && item.action.includes('edited') && (
+                              <div className="mt-2 text-[10px] text-slate-400 font-medium italic">
+                                ({item.reason})
+                              </div>
+                            )}
                           </div>
                           
                           <p className="text-xs text-slate-500 mt-0.5">
@@ -548,7 +645,10 @@ const CreateReceiptPage: React.FC = () => {
                       )}
 
                       {medTab === 'stopped' && (
-                        <button className="mt-2.5 text-xs text-teal-600 font-bold border-2 border-teal-600/20 px-4 py-1.5 rounded-xl hover:bg-teal-50 transition-colors">
+                        <button 
+                          onClick={() => handleOpenRecreateConfirm(item.medication)}
+                          className="mt-2.5 text-xs text-teal-600 font-bold border-2 border-teal-600/20 px-4 py-1.5 rounded-xl hover:bg-teal-50 transition-colors"
+                        >
                           สร้างยาใหม่จากข้อมูลเดิม
                         </button>
                       )}
@@ -563,10 +663,11 @@ const CreateReceiptPage: React.FC = () => {
         {/* STEP 3 - Review */}
         {step === 2 && (() => {
           const selected = items.filter(i => i.selected);
-          // Sort actions so เพิ่มจำนวนยา is always last
-          const sortAction = (actions: string[]) => {
-            const sorted = actions.filter(a => a !== 'เพิ่มจำนวนยา');
-            if (actions.includes('เพิ่มจำนวนยา')) sorted.push('เพิ่มจำนวนยา');
+          // Sort actions so added_quantity is always last
+          const sortAction = (actions: string[] | ReceiptAction[]) => {
+            const casted = actions as string[];
+            const sorted = casted.filter(a => a !== 'added_quantity');
+            if (casted.includes('added_quantity')) sorted.push('added_quantity');
             return sorted;
           };
 
@@ -581,35 +682,35 @@ const CreateReceiptPage: React.FC = () => {
 
           // Action label map
           const actionLabelMap: Record<string, string> = {
-            'รายการใหม่': 'รายการใหม่',
-            'เพิ่มจำนวนยา': 'เพิ่มจำนวนยา',
-            'แก้ไขข้อมูล/วิธีการให้ยา': 'แก้ไขข้อมูล / วิธีการให้ยา',
-            'หยุดยา': 'หยุดยา',
+            'new': 'รายการใหม่',
+            'added_quantity': 'เพิ่มจำนวนยา',
+            'edited': 'แก้ไขข้อมูล / วิธีการให้ยา',
+            'stopped': 'หยุดยา',
           };
 
           // Color for first action (left border)
           const actionBorderColor = (firstAction: string) => {
             switch (firstAction) {
-              case 'รายการใหม่': return 'border-l-primary';
-              case 'เพิ่มจำนวนยา': return 'border-l-med-success';
-              case 'แก้ไขข้อมูล/วิธีการให้ยา': return 'border-l-med-warning';
-              case 'หยุดยา': return 'border-l-destructive';
+              case 'new': return 'border-l-primary';
+              case 'added_quantity': return 'border-l-med-success';
+              case 'edited': return 'border-l-med-warning';
+              case 'stopped': return 'border-l-destructive';
               default: return 'border-l-primary';
             }
           };
 
           const actionGroupColor = (firstAction: string) => {
             switch (firstAction) {
-              case 'รายการใหม่': return 'text-primary';
-              case 'เพิ่มจำนวนยา': return 'text-med-success';
-              case 'แก้ไขข้อมูล/วิธีการให้ยา': return 'text-med-warning';
-              case 'หยุดยา': return 'text-destructive';
+              case 'new': return 'text-primary';
+              case 'added_quantity': return 'text-med-success';
+              case 'edited': return 'text-[#0ea5e9]';
+              case 'stopped': return 'text-destructive';
               default: return 'text-primary';
             }
           };
 
           // Define group order
-          const groupOrder = ['รายการใหม่', 'เพิ่มจำนวนยา', 'แก้ไขข้อมูล/วิธีการให้ยา', 'หยุดยา'];
+          const groupOrder = ['new', 'edited', 'added_quantity', 'stopped'];
           const sortedGroupKeys = Object.keys(groups).sort((a, b) => {
             const aFirst = sortAction(a.split(','))[0];
             const bFirst = sortAction(b.split(','))[0];
@@ -632,14 +733,23 @@ const CreateReceiptPage: React.FC = () => {
                 return (
                   <div key={groupKey} className="space-y-3">
                     {/* Group header */}
-                    <div className={`text-sm font-semibold ${actionGroupColor(firstAction)}`}>
-                      {groupLabel} ({groupItems.length})
+                    <div className={`text-sm font-bold ${actionGroupColor(firstAction)} mb-3 flex items-center gap-1.5`}>
+                      <span className="capitalize">{groupLabel}</span>
+                      <span className="bg-current/10 px-1.5 py-0.5 rounded text-[10px]">({groupItems.length})</span>
                     </div>
 
                     {groupItems.map(item => (
-                      <div key={item.medication.id} className={`bg-card rounded-xl p-4 border border-border shadow-sm border-l-4 ${actionBorderColor(firstAction)}`}>
-                        <div className="flex items-start gap-3">
-                          <div className="h-14 w-14 rounded-lg bg-secondary flex items-center justify-center text-xl flex-shrink-0">💊</div>
+                      <div className={`bg-card rounded-xl p-4 border border-border shadow-sm border-l-8 ${actionBorderColor(firstAction)}`}>
+                        <div className="flex items-start gap-4">
+                          <div className="h-20 w-20 rounded-lg bg-[#6a8a7c]/20 flex items-center justify-center flex-shrink-0 overflow-hidden relative shadow-inner">
+                            <div className="absolute inset-0 flex flex-col items-center justify-center opacity-40">
+                              <div className="w-8 h-10 border-2 border-teal-900 rounded-sm mb-1 translate-y-1"></div>
+                              <div className="w-10 h-10 border border-teal-900/30 rounded-sm rotate-12 absolute scale-110"></div>
+                            </div>
+                            <span className="relative z-10 text-[8px] font-bold text-teal-900/40 text-center px-1 leading-tight">
+                              MEDICATION<br/>BOTTLE<br/>IMAGE
+                            </span>
+                          </div>
                           <div className="flex-1 min-w-0">
                             <h4 className="font-semibold text-foreground text-sm">
                               {item.medication.name} {item.medication.strength}{item.medication.strengthUnit}
@@ -650,7 +760,7 @@ const CreateReceiptPage: React.FC = () => {
 
                             {/* Status dot */}
                             <div className="mt-1">
-                              <span className={`inline-block h-2 w-2 rounded-full ${item.action.includes('หยุดยา') ? 'bg-destructive' : 'bg-med-success'}`} />
+                              <span className={`inline-block h-2 w-2 rounded-full ${item.action.includes('stopped') ? 'bg-destructive' : 'bg-[#22c55e]'}`} />
                             </div>
 
                             {/* Frequency */}
@@ -692,15 +802,15 @@ const CreateReceiptPage: React.FC = () => {
                               </div>
                             )}
 
-                            {/* Action badges - เพิ่มจำนวนยา always last */}
+                            {/* Action badges - added_quantity always last */}
                             <div className="flex flex-wrap gap-1 mt-2">
                               {sortAction(item.action).map(a => (
-                                <span key={a} className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                                  a === 'หยุดยา' ? 'bg-destructive/10 text-destructive' :
-                                  a === 'เพิ่มจำนวนยา' ? 'bg-med-success/10 text-med-success' :
-                                  a === 'รายการใหม่' ? 'bg-primary/10 text-primary' :
-                                  'bg-med-warning/10 text-med-warning'
-                                }`}>{a}</span>
+                                <span key={a} className={`text-[11px] px-2.5 py-1 rounded-full font-bold shadow-sm ${
+                                  a === 'stopped' ? 'bg-[#fff1f2] text-[#f43f5e] border border-[#ffe4e6]' :
+                                  a === 'added_quantity' ? 'bg-[#f0fdf4] text-[#22c55e] border border-[#dcfce7]' :
+                                  a === 'new' ? 'bg-[#f0f9ff] text-[#0ea5e9] border border-[#bae6fd]' :
+                                  'bg-[#fdf4ff] text-[#a855f7] border border-[#fae8ff]'
+                                }`}>{actionLabelMap[a] || a}</span>
                               ))}
                             </div>
                           </div>
@@ -711,11 +821,7 @@ const CreateReceiptPage: React.FC = () => {
                 );
               })}
 
-              <div className="space-y-2 pt-4">
-                <Button className="w-full" onClick={handleSave}>
-                  ยืนยัน
-                </Button>
-              </div>
+              <div className="pt-4" />
             </div>
           );
         })()}
@@ -845,43 +951,122 @@ const CreateReceiptPage: React.FC = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Recreate Medication Confirmation Modal */}
+      <Dialog open={isRecreateConfirmOpen} onOpenChange={setIsRecreateConfirmOpen}>
+        <DialogContent className="max-w-[90vw] sm:max-w-[400px] rounded-3xl p-6 gap-0">
+          <DialogHeader className="space-y-3 pb-4">
+            <DialogTitle className="text-center text-[#1e7874] text-xl font-bold leading-snug">
+              ยืนยันการสร้างยาใหม่
+            </DialogTitle>
+            <DialogDescription className="text-center text-slate-500 text-sm font-medium leading-relaxed">
+              ต้องการสร้างรายการยาใหม่โดยใช้ข้อมูลเดิมของ<br />
+              <span className="font-bold text-slate-700">“{recreatingMedTemplate?.name}”</span> ใช่หรือไม่?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex gap-3 mt-8">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsRecreateConfirmOpen(false)}
+              className="flex-1 h-12 rounded-2xl bg-slate-100 border-0 text-slate-500 font-bold hover:bg-slate-200"
+            >
+              ยกเลิก
+            </Button>
+            <Button 
+              onClick={handleConfirmRecreate}
+              className="flex-1 h-12 rounded-2xl bg-[#1a8e89] hover:bg-[#167d79] text-white font-bold shadow-lg shadow-teal-100"
+            >
+              ตกลง
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Adjust Medication Bottom Sheet */}
       <BottomSheet 
         open={isAdjustModalOpen} 
         onOpenChange={setIsAdjustModalOpen} 
-        title={adjustStep === 2 ? "แก้ไขรายการยา" : "เพิ่มรายการยา"}
+        title="แก้ไขรายการยา"
       >
         <div className="px-1 pb-6">
           {/* Internal Stepper */}
           <div className="flex items-center justify-center gap-4 py-4 mb-4">
-            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-bold bg-[#009292] text-white`}>1</div>
-            <div className={`h-1 w-12 rounded bg-[#009292]`} />
-            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-bold ${adjustStep >= 2 ? 'bg-[#009292] text-white' : 'bg-slate-100 text-slate-400'}`}>2</div>
-            <div className={`h-1 w-12 rounded ${adjustStep >= 3 ? 'bg-[#009292]' : 'bg-slate-100'}`} />
-            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-bold ${adjustStep >= 3 ? 'bg-[#009292] text-white' : 'bg-slate-100 text-slate-400'}`}>3</div>
+            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-bold ${adjustStep === 1 ? 'bg-[#1a8e89] text-white shadow-lg ring-4 ring-[#1a8e89]/20' : 'bg-[#eef2fc] text-[#6366f1]'}`}>1</div>
+            <div className={`h-[2px] w-12 rounded ${adjustStep >= 2 ? 'bg-[#009292]' : 'bg-slate-100'}`} />
+            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-bold ${adjustStep === 2 ? 'bg-[#1a8e89] text-white shadow-lg ring-4 ring-[#1a8e89]/20' : 'bg-[#eef2fc] text-[#6366f1]'}`}>2</div>
+            <div className={`h-[2px] w-12 rounded ${adjustStep >= 3 ? 'bg-[#009292]' : 'bg-slate-100'}`} />
+            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-bold ${adjustStep === 3 ? 'bg-[#1a8e89] text-white shadow-lg ring-4 ring-[#1a8e89]/20' : 'bg-[#eef2fc] text-[#6366f1]'}`}>3</div>
           </div>
 
-          <div className="flex items-center gap-2 mb-6">
+          <div className="flex items-center gap-2 mb-6 ml-1">
             <button onClick={() => adjustStep > 2 && setAdjustStep(prev => prev - 1)} className="p-1">
-              <ChevronLeft className="h-5 w-5 text-[#009292]" />
+              <ChevronLeft className="h-5 w-5 text-[#1a8e89]" />
             </button>
             <h3 className="text-[#1a8e89] font-bold text-lg">
-              {adjustStep === 2 ? 'ข้อมูลการให้ยา' : 'ข้อมูลจำนวนและวันให้ยา'}
+              {adjustStep === 1 ? 'ข้อมูลพื้นฐาน' : adjustStep === 2 ? 'ข้อมูลการให้ยา' : 'ข้อมูลจำนวนและวันให้ยา'}
             </h3>
           </div>
 
           <div className="border border-[#c7d2fe] rounded-3xl p-5 border-l-8 border-l-[#a5b4fc] relative overflow-hidden">
-            {adjustStep === 2 ? (
+            {adjustStep === 1 ? (
               <div className="space-y-6">
                 <div className="relative">
-                  <h4 className="text-[#6366f1] font-bold text-sm mb-4 border-b border-[#e2e8f0] pb-2 uppercase tracking-wide">ขนาดและปริมาณยา</h4>
+                  <h4 className="text-[#6366f1] font-bold text-sm mb-4 border-b border-[#e2e8f0] pb-2 uppercase tracking-wide italic">ข้อมูลพื้นฐาน</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-bold text-[#334155] mb-2 block">ชื่อยา <span className="text-destructive">*</span></label>
+                      <input 
+                        value={adjName}
+                        onChange={e => setAdjName(e.target.value)}
+                        placeholder="ชื่อยา"
+                        className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20 font-medium"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-bold text-[#334155] mb-2 block">ความแรง</label>
+                        <input 
+                          value={adjStrength}
+                          onChange={e => setAdjStrength(e.target.value)}
+                          placeholder="เช่น 500"
+                          className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20 font-medium"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-bold text-[#334155] mb-2 block">หน่วยความแรง</label>
+                        <input 
+                          value={adjStrengthUnit}
+                          onChange={e => setAdjStrengthUnit(e.target.value)}
+                          placeholder="เช่น mg"
+                          className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20 font-medium"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-bold text-[#334155] mb-2 block">วิธีใช้ยา <span className="text-destructive">*</span></label>
+                      <input 
+                        value={adjAdminMethod}
+                        onChange={e => setAdjAdminMethod(e.target.value)}
+                        placeholder="เช่น รับประทาน"
+                        className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20 font-medium"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : adjustStep === 2 ? (
+              <div className="space-y-6">
+                <div className="relative">
+                  <h4 className="text-[#6366f1] font-bold text-sm mb-4 border-b border-[#e2e8f0] pb-2 uppercase tracking-wide italic">ขนาดและปริมาณยา</h4>
                   <div className="space-y-4">
                     <div>
                       <label className="text-sm font-bold text-[#334155] mb-2 block">ปริมาณต่อครั้ง <span className="text-destructive">*</span></label>
                       <input 
                         type="number" 
+                        step="0.01"
                         value={adjAmountPerDose}
                         onChange={e => setAdjAmountPerDose(e.target.value)}
+                        placeholder="1.00"
                         className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20 text-lg font-medium"
                       />
                     </div>
@@ -892,7 +1077,7 @@ const CreateReceiptPage: React.FC = () => {
                           <button
                             key={unit}
                             onClick={() => setAdjDoseUnit(unit)}
-                            className={`py-2 px-1 rounded-2xl text-xs font-bold transition-all ${adjDoseUnit === unit ? 'bg-[#1a8e89] text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                            className={`py-2 px-1 rounded-2xl text-xs font-bold transition-all ${adjDoseUnit === unit ? 'bg-[#1a8e89] text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
                           >
                             {unit}
                           </button>
@@ -903,7 +1088,7 @@ const CreateReceiptPage: React.FC = () => {
                 </div>
 
                 <div className="relative pt-2">
-                  <h4 className="text-[#6366f1] font-bold text-sm mb-4 border-b border-[#e2e8f0] pb-2 uppercase tracking-wide">ความถี่</h4>
+                  <h4 className="text-[#6366f1] font-bold text-sm mb-4 border-b border-[#e2e8f0] pb-2 uppercase tracking-wide italic">ความถี่</h4>
                   <div className="space-y-4">
                     <div>
                       <label className="text-sm font-bold text-[#334155] mb-3 block">ความถี่ <span className="text-destructive">*</span></label>
@@ -912,7 +1097,7 @@ const CreateReceiptPage: React.FC = () => {
                           <button 
                             key={f}
                             onClick={() => { setAdjFrequency(f); if (f === 'prn') setAdjTimings([]); }}
-                            className={`px-4 py-2.5 rounded-2xl text-[13px] font-bold transition-all ${adjFrequency === f ? 'bg-[#1a8e89] text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                            className={`px-4 py-2.5 rounded-2xl text-[13px] font-bold transition-all ${adjFrequency === f ? 'bg-[#1a8e89] text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
                           >
                             {f === 'daily' ? 'ทุกวัน' : f === 'specific_days' ? 'เฉพาะบางวัน' : f === 'prn' ? 'เมื่อมีอาการ (PRN)' : 'ทุก…วัน'}
                           </button>
@@ -1002,15 +1187,29 @@ const CreateReceiptPage: React.FC = () => {
             ) : (
               <div className="space-y-6">
                 <div className="relative">
-                  <h4 className="text-[#6366f1] font-bold text-sm mb-4 border-b border-[#e2e8f0] pb-2 uppercase tracking-wide">ระยะเวลาให้ยา</h4>
+                  <h4 className="text-[#6366f1] font-bold text-sm mb-4 border-b border-[#e2e8f0] pb-2 uppercase tracking-wide italic">ระยะเวลาให้ยา</h4>
                   <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-bold text-[#334155] mb-2 block">สถานะการให้ยา:</label>
+                      <div className="relative">
+                        <select 
+                          value={adjStatus}
+                          onChange={e => setAdjStatus(e.target.value as MedicationStatus)}
+                          className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:outline-none font-bold text-[13px] text-[#009292] bg-white appearance-none pr-10"
+                        >
+                          <option value="active">● ให้ยาปกติ</option>
+                          <option value="stopped">● หยุดยา</option>
+                        </select>
+                        <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 rotate-90" />
+                      </div>
+                    </div>
                     <div>
                       <label className="text-sm font-bold text-[#334155] mb-2 block">ผู้สั่งยา</label>
                       <input 
                         value={adjPrescribedBy}
                         onChange={e => setAdjPrescribedBy(e.target.value)}
                         placeholder="หมอวิชัย"
-                        className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20 font-medium"
+                        className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20 font-medium placeholder:text-slate-300"
                       />
                     </div>
                     <div>
@@ -1020,7 +1219,7 @@ const CreateReceiptPage: React.FC = () => {
                           type="datetime-local" 
                           value={adjStartDate}
                           onChange={e => setAdjStartDate(e.target.value)}
-                          className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:outline-none font-medium text-sm"
+                          className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:outline-none font-medium text-sm pr-12"
                         />
                         <div className="absolute right-0 top-0 h-full w-12 bg-[#1a8e89] rounded-r-2xl flex items-center justify-center pointer-events-none">
                           <Calendar className="h-5 w-5 text-white" />
@@ -1034,7 +1233,7 @@ const CreateReceiptPage: React.FC = () => {
                           type="datetime-local" 
                           value={adjEndDate}
                           onChange={e => setAdjEndDate(e.target.value)}
-                          className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:outline-none font-medium text-sm"
+                          className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:outline-none font-medium text-sm pr-12"
                         />
                         <div className="absolute right-0 top-0 h-full w-12 bg-[#1a8e89] rounded-r-2xl flex items-center justify-center pointer-events-none">
                           <Calendar className="h-5 w-5 text-white" />
@@ -1045,7 +1244,7 @@ const CreateReceiptPage: React.FC = () => {
                 </div>
 
                 <div className="relative pt-2">
-                  <h4 className="text-[#6366f1] font-bold text-sm mb-4 border-b border-[#e2e8f0] pb-2 uppercase tracking-wide">ข้อมูลจำนวนยา</h4>
+                  <h4 className="text-[#6366f1] font-bold text-sm mb-4 border-b border-[#e2e8f0] pb-2 uppercase tracking-wide italic">ข้อมูลจำนวนยา</h4>
                   <div className="space-y-4">
                     <div>
                       <label className="text-sm font-bold text-[#334155] mb-2 block">จำนวนยาปัจจุบัน</label>
@@ -1065,25 +1264,46 @@ const CreateReceiptPage: React.FC = () => {
                           </button>
                         </div>
                       </div>
-                      <p className="text-xs text-slate-400 mt-2 font-medium">หน่วย : {adjDoseUnit}</p>
+                      <div className="flex justify-between items-center mt-2">
+                        <p className="text-xs text-slate-400 font-medium whitespace-nowrap">หน่วย : {adjDoseUnit}</p>
+                        <p className="text-xs text-slate-300 font-medium">ให้ยาได้ถึง : 0 วัน</p>
+                      </div>
                     </div>
                     <div>
                       <label className="text-sm font-bold text-[#334155] mb-2 block">แจ้งเตือนเมื่อเหลือพอใช้ (วัน)</label>
-                      <select 
-                        value={adjAlertDays}
-                        onChange={e => setAdjAlertDays(Number(e.target.value))}
-                        className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:outline-none font-medium text-sm bg-white appearance-none"
-                      >
-                        <option value={1}>1 วัน</option>
-                        <option value={3}>3 วัน</option>
-                        <option value={7}>7 วัน</option>
-                        <option value={14}>14 วัน</option>
-                        <option value={30}>30 วัน</option>
-                      </select>
-                      <p className="text-[11px] text-slate-400 mt-2 text-center italic">
+                      <div className="relative">
+                        <select 
+                          value={adjAlertDays}
+                          onChange={e => setAdjAlertDays(Number(e.target.value))}
+                          className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:outline-none font-medium text-sm bg-white appearance-none pr-10"
+                        >
+                          <option value={1}>1 วัน</option>
+                          <option value={3}>3 วัน</option>
+                          <option value={7}>7 วัน</option>
+                          <option value={14}>14 วัน</option>
+                          <option value={30}>30 วัน</option>
+                        </select>
+                        <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 rotate-90" />
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-2 text-center font-medium leading-tight">
                         เมื่อยาคงเหลือพอใช้ได้ตามจำนวนวันที่ตั้งค่า<br />
-                        สถานะจะเป็น "ใกล้หมด"
+                        สถานะจะเป็น <span className="text-[#a855f7]">"ใกล้หมด"</span>
                       </p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-bold text-[#334155] mb-2 block">วันหมดอายุ (ถ้ามี)</label>
+                      <div className="relative">
+                        <input 
+                          type="datetime-local" 
+                          value={adjExpirationDate}
+                          onChange={e => setAdjExpirationDate(e.target.value)}
+                          placeholder="ระบุเวลา"
+                          className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:outline-none font-medium text-sm pr-12 placeholder:text-slate-300"
+                        />
+                        <div className="absolute right-0 top-0 h-full w-12 bg-[#1a8e89] rounded-r-2xl flex items-center justify-center pointer-events-none">
+                          <Calendar className="h-5 w-5 text-white" />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1093,17 +1313,23 @@ const CreateReceiptPage: React.FC = () => {
 
           <div className="flex gap-4 mt-8">
             <Button 
-              variant="outline" 
-              onClick={() => adjustStep === 2 ? setIsAdjustModalOpen(false) : setAdjustStep(2)}
-              className="flex-1 h-14 rounded-2xl bg-slate-50 border-0 text-slate-400 font-bold hover:bg-slate-100"
+              variant="secondary" 
+              onClick={() => {
+                if (adjustStep === 1) setIsAdjustModalOpen(false);
+                else setAdjustStep(prev => prev - 1);
+              }}
+              className="flex-1 h-14 rounded-2xl bg-[#eff3f8] border-0 text-[#94a3b8] font-bold hover:bg-slate-200 flex items-center justify-center gap-2"
             >
-              ยกเลิก
+              <ChevronLeft className="h-5 w-5" /> ก่อนหน้า
             </Button>
             <Button 
-              onClick={() => adjustStep === 2 ? setAdjustStep(3) : handleSaveAdjustment()}
+              onClick={() => {
+                if (adjustStep < 3) setAdjustStep(prev => prev + 1);
+                else handleSaveAdjustment();
+              }}
               className="flex-1 h-14 rounded-2xl bg-[#1a8e89] hover:bg-[#167d79] text-white font-bold flex items-center justify-center gap-2 shadow-lg shadow-teal-100"
             >
-              {adjustStep === 2 ? 'ถัดไป' : 'บันทึก'} <ChevronRight className="h-5 w-5" />
+              {adjustStep < 3 ? 'ถัดไป' : 'บันทึก'} <ChevronRight className="h-5 w-5" />
             </Button>
           </div>
         </div>
