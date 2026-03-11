@@ -519,144 +519,117 @@ const CreateReceiptPage: React.FC = () => {
                 const matchSearch = i.medication.name.toLowerCase().includes(searchQuery.toLowerCase());
                 return matchTab && matchSearch;
               }).map(item => (
-                <div key={item.medication.id} className="bg-card rounded-xl p-4 border border-border shadow-sm">
-                  <div className="flex items-start gap-4">
-                    <div className="h-20 w-20 rounded-lg bg-[#6a8a7c]/20 flex items-center justify-center flex-shrink-0 overflow-hidden relative shadow-inner">
-                      <div className="absolute inset-0 flex flex-col items-center justify-center opacity-40">
-                         <div className="w-8 h-10 border-2 border-teal-900 rounded-sm mb-1 translate-y-1"></div>
-                         <div className="w-10 h-10 border border-teal-900/30 rounded-sm rotate-12 absolute scale-110"></div>
-                      </div>
-                      <span className="relative z-10 text-xs font-bold text-teal-900/40 text-center px-1 leading-tight">
-                        MEDICATION<br/>BOTTLE<br/>IMAGE
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      {(item.action.includes('stopped') || item.medication.status === 'stopped') ? (
-                        /* STOPPED CARD LAYOUT */
-                        <div className="mt-1 space-y-1">
-                          <div className="flex items-center justify-between">
-                            <h4 className="font-bold text-slate-800 text-[15px] truncate pr-2">
-                              {item.medication.name} {item.medication.strength}{item.medication.strengthUnit}
-                            </h4>
-                            <span className="bg-[#fff1f2] text-[#f43f5e] text-[10px] px-2 py-1 rounded-full font-bold border border-[#ffe4e6]">
-                              หยุดยาแล้ว
-                            </span>
-                          </div>
-                          
-                          <div className="space-y-0.5 mt-2">
-                            <p className="text-[11px] text-slate-500 font-medium">
-                              วันที่หยุดยา: {item.medication.stoppedDate ? new Date(item.medication.stoppedDate).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: '2-digit' }) : new Date().toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: '2-digit' })}
-                            </p>
-                            <p className="text-[11px] text-slate-500 font-medium">
-                              หยุดยาโดย: {item.medication.stoppedBy || 'นางสายธาร นามา'}
-                            </p>
-                            <p className="text-[11px] text-slate-500 font-medium">
-                              คงเหลือเก่า : {item.medication.currentAmount} {item.medication.doseUnit}
-                            </p>
-                          </div>
+                <div key={item.medication.id} className={`bg-card border border-border shadow-sm overflow-hidden ${
+                  medTab === 'stopped' ? 'rounded-2xl p-4' : 'rounded-2xl px-4 pt-3.5 pb-0'
+                }`}>
 
-                          {/* Removed ยกเลิกการหยุดยา button as per request */}
+                  {medTab === 'stopped' ? (
+                    /* ===== STOPPED TAB CARD LAYOUT ===== */
+                    <>
+                      <div className="flex items-start gap-3">
+                        {/* Larger pill image for stopped tab */}
+                        <div className="h-14 w-14 rounded-xl bg-[#6a8a7c]/20 flex items-center justify-center flex-shrink-0 overflow-hidden relative shadow-inner">
+                          <div className="absolute inset-0 flex flex-col items-center justify-center opacity-40">
+                             <div className="w-6 h-8 border-2 border-teal-900 rounded-sm mb-0.5 translate-y-0.5"></div>
+                             <div className="w-8 h-8 border border-teal-900/30 rounded-sm rotate-12 absolute scale-110"></div>
+                          </div>
                         </div>
-                      ) : (
-                        /* ACTIVE CARD LAYOUT */
-                        <>
-                          <div className="flex items-start justify-between">
-                            <h4 className="font-bold text-slate-800 text-[15px] truncate pr-2">
+
+                        {/* Name + stop details */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <h4 className="font-bold text-slate-800 text-[14px] truncate">
                               {item.medication.name} {item.medication.strength}{item.medication.strengthUnit}
                             </h4>
-                            <div className="flex items-center gap-2">
-                              {item.action.includes('edited') && (
-                                <span className="bg-[#f0f9ff] text-[#0ea5e9] text-[10px] px-2 py-0.5 rounded-full font-bold border border-[#bae6fd]">
-                                  แก้ไขแล้ว
-                                </span>
-                              )}
-                              {medTab === 'current' && (
-                                <button 
-                                  onClick={() => handleOpenAdjustModal(item)}
-                                  className="text-xs text-[#a855f7] font-bold whitespace-nowrap hover:underline"
-                                >
-                                  ปรับการให้ยา
-                                </button>
-                              )}
-                            </div>
-                            {item.reason && item.action.includes('edited') && (
-                              <div className="mt-2 text-[10px] text-slate-400 font-medium italic">
-                                ({item.reason})
-                              </div>
+                            <span className="shrink-0 bg-[#fff1f2] text-[#f43f5e] text-[10px] px-2.5 py-1 rounded-full font-bold border border-[#ffe4e6] whitespace-nowrap">หยุดยาแล้ว</span>
+                          </div>
+                          <div className="mt-1.5 space-y-0.5">
+                            <p className="text-[12px] text-slate-500">วันที่หยุดยา: {item.medication.stoppedDate ? new Date(item.medication.stoppedDate).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: '2-digit' }) : new Date().toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: '2-digit' })}</p>
+                            <p className="text-[12px] text-slate-500">หยุดยาโดย: {item.medication.stoppedBy || 'นางสายธาร นามา'}</p>
+                            <p className="text-[12px] text-slate-500">คงเหลือเก่า : {item.medication.currentAmount} {item.medication.doseUnit}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Full-width purple CTA button */}
+                      <button
+                        onClick={() => handleOpenRecreateConfirm(item.medication)}
+                        className="mt-4 w-full flex items-center justify-center gap-2.5 bg-[#7c3aed] hover:bg-[#6d28d9] text-white text-[13px] font-bold py-3 rounded-xl transition-all shadow-md shadow-purple-200 active:scale-[0.98]">
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 2v6h-6" />
+                          <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+                          <path d="M3 22v-6h6" />
+                          <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+                        </svg>
+                        สร้างยาใหม่จากข้อมูลเดิม
+                      </button>
+                    </>
+                  ) : (
+                    /* ===== CURRENT TAB CARD LAYOUT ===== */
+                    <>
+                      <div className="flex items-center gap-3">
+                        {/* Pill image */}
+                        <div className="h-12 w-12 rounded-xl bg-[#6a8a7c]/20 flex items-center justify-center flex-shrink-0 overflow-hidden relative shadow-inner">
+                          <div className="absolute inset-0 flex flex-col items-center justify-center opacity-40">
+                             <div className="w-5 h-7 border-2 border-teal-900 rounded-sm mb-0.5 translate-y-0.5"></div>
+                             <div className="w-7 h-7 border border-teal-900/30 rounded-sm rotate-12 absolute scale-110"></div>
+                          </div>
+                        </div>
+
+                        {/* Name + dose info */}
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-bold text-slate-800 text-[14px] truncate leading-snug">
+                            {item.medication.name} {item.medication.strength}{item.medication.strengthUnit}
+                          </h4>
+                          <div className="flex flex-wrap items-center gap-x-1.5 mt-0.5">
+                            <span className="text-[12px] text-slate-500">{item.medication.amountPerDose} {item.medication.doseUnit}/ครั้ง</span>
+                            <span className="text-[11px] text-slate-400">เดิมมี: {item.medication.currentAmount} {item.medication.doseUnit}</span>
+                            {item.action.includes('edited') && (
+                              <span className="bg-[#f0f9ff] text-[#0ea5e9] text-[10px] px-1.5 py-0.5 rounded-full font-bold border border-[#bae6fd]">แก้ไขแล้ว</span>
                             )}
                           </div>
-                          
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            {item.medication.amountPerDose} {item.medication.doseUnit}/ครั้ง
-                          </p>
+                        </div>
 
-                          <div className="flex items-center gap-1.5 mt-2.5 text-[11px] text-slate-600 font-medium">
-                            <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                            <span>{item.medication.frequency === 'daily' ? 'ทุกวัน' : item.medication.frequency === 'prn' ? 'PRN' : 'ตามกำหนด'}</span>
-                          </div>
-
-                          <div className="flex items-start gap-1.5 mt-1.5 text-[11px] text-slate-600 font-medium">
-                            <svg className="w-3.5 h-3.5 text-slate-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                            <div className="flex flex-wrap gap-x-1.5 gap-y-0.5">
-                              {item.medication.timings.map((t, idx) => (
-                                <span key={t.id} className="whitespace-nowrap">
-                                  {t.time} ({TIME_OF_DAY_LABELS[t.timeOfDay]}, {FOOD_TIMING_LABELS[t.foodTiming]}){idx < item.medication.timings.length - 1 ? ',' : ''}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between mt-4 text-[11px] font-medium">
-                            <span className="text-slate-400 font-normal">เดิมมี: {item.medication.currentAmount} {item.medication.doseUnit}</span>
-                            <span className="text-slate-400 font-normal">คงเหลือใหม่: <span className="text-slate-500">{item.medication.currentAmount + item.addedQty} {item.medication.doseUnit}</span></span>
-                          </div>
-
-                        </>
-                      )}
-
-                      {medTab === 'current' && (
-                        <div className="flex items-center justify-between mt-3.5">
-                          <button
-                            onClick={() => {
-                              setStoppingMedId(item.medication.id);
-                              setIsStopModalOpen(true);
-                            }}
-                            className="text-xs px-5 py-2 rounded-xl font-bold transition-all shadow-sm bg-red-50 text-red-500 hover:bg-red-100 active:scale-95">
-                            หยุดให้ยา
-                          </button>
-
-                          <div className="flex items-center gap-0 bg-[#f8fafc] rounded-xl border border-slate-200/60 p-0.5 shadow-sm">
+                        {/* Quantity counter */}
+                        <div className="flex flex-col items-end shrink-0">
+                          <div className="flex items-center bg-[#f8fafc] rounded-xl border border-slate-200/60 shadow-sm">
                             <button onClick={() => {
                               const newQty = Math.max(0, item.addedQty - 1);
-                              const newAction = newQty > 0 
+                              const newAction = newQty > 0
                                 ? [...item.action.filter(a => a !== 'เพิ่มจำนวนยา'), 'เพิ่มจำนวนยา']
                                 : item.action.filter(a => a !== 'เพิ่มจำนวนยา');
                               updateItem(item.medication.id, { addedQty: newQty, action: newAction, selected: newQty > 0 || newAction.length > 0 });
-                            }} className="h-9 w-9 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors">
-                              <Minus className="h-4 w-4" />
+                            }} className="h-7 w-7 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors">
+                              <Minus className="h-3 w-3" />
                             </button>
-                            <span className="text-[15px] font-black text-slate-800 w-10 text-center">{item.addedQty}</span>
+                            <span className="text-[13px] font-black text-slate-800 w-7 text-center">{item.addedQty}</span>
                             <button onClick={() => {
                               const newQty = item.addedQty + 1;
                               const newAction = [...item.action.filter(a => a !== 'เพิ่มจำนวนยา'), 'เพิ่มจำนวนยา'];
                               updateItem(item.medication.id, { addedQty: newQty, action: newAction, selected: true });
-                            }} className="h-9 w-9 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors">
-                              <Plus className="h-4 w-4" />
+                            }} className="h-7 w-7 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors">
+                              <Plus className="h-3 w-3" />
                             </button>
                           </div>
+                          <span className="text-[10px] text-slate-400 mt-1 text-right">คงเหลือใหม่: {item.medication.currentAmount + item.addedQty} {item.medication.doseUnit}</span>
                         </div>
-                      )}
+                      </div>
 
-                      {medTab === 'stopped' && (
-                        <button 
-                          onClick={() => handleOpenRecreateConfirm(item.medication)}
-                          className="mt-2.5 text-xs text-teal-600 font-bold border-2 border-teal-600/20 px-4 py-1.5 rounded-xl hover:bg-teal-50 transition-colors"
-                        >
-                          สร้างยาใหม่จากข้อมูลเดิม
+                      {/* Bottom action row */}
+                      <div className="flex items-center justify-between border-t border-slate-100 mt-3 py-2.5">
+                        <button
+                          onClick={() => handleOpenAdjustModal(item)}
+                          className="text-xs font-bold text-[#1a8e89] hover:opacity-75 transition-opacity">
+                          ปรับการให้ยา
                         </button>
-                      )}
-                    </div>
-                  </div>
+                        <button
+                          onClick={() => { setStoppingMedId(item.medication.id); setIsStopModalOpen(true); }}
+                          className="text-xs font-bold text-[#ef4444] hover:opacity-75 transition-opacity">
+                          หยุดให้ยา
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
@@ -756,26 +729,11 @@ const CreateReceiptPage: React.FC = () => {
                                 <h4 className="font-bold text-[#7c3aed] text-base leading-tight">
                                   {item.medication.name} {item.medication.strength}{item.medication.strengthUnit}
                                 </h4>
-                                <p className="text-[13px] font-bold text-slate-800 mt-1">
-                                  {item.medication.amountPerDose} {item.medication.doseUnit}/ครั้ง
-                                </p>
-
-                                {/* Frequency */}
-                                <div className="flex items-center gap-1.5 mt-2 text-[11px] text-teal-600 font-bold">
-                                  <Calendar className="h-3.5 w-3.5" />
-                                  <span>{item.medication.frequency === 'daily' ? 'ทุกวัน' : item.medication.frequency === 'prn' ? 'PRN' : 'ตามกำหนด'}</span>
-                                </div>
-
-                                {/* Timing description */}
-                                <div className="flex items-start gap-1.5 mt-1.5 text-[11px] text-slate-500 font-medium">
-                                  <svg className="w-3.5 h-3.5 text-slate-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                  <div className="flex flex-wrap gap-x-1.5 gap-y-0.5">
-                                    {item.medication.timings.map((t, idx) => (
-                                      <span key={t.id} className="whitespace-nowrap">
-                                        {t.time} ({TIME_OF_DAY_LABELS[t.timeOfDay]}, {FOOD_TIMING_LABELS[t.foodTiming]}){idx < item.medication.timings.length - 1 ? ',' : ''}
-                                      </span>
-                                    ))}
-                                  </div>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <p className="text-[12px] text-slate-500 font-medium">
+                                    {item.medication.amountPerDose} {item.medication.doseUnit}/ครั้ง
+                                  </p>
+                                  <span className="text-[11px] text-slate-300 font-medium">เดิมมี: {item.medication.currentAmount} {item.medication.doseUnit}</span>
                                 </div>
 
                                 {/* Quantity info */}
