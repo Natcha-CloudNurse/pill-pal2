@@ -60,8 +60,8 @@ const CreateReceiptPage: React.FC = () => {
   // Step 2
   const [medTab, setMedTab] = useState<'current' | 'stopped'>('current');
   const [searchQuery, setSearchQuery] = useState('');
-  const [items, setItems] = useState<MedReceiptItem[]>(
-    mockMedications.filter(m => m.status === 'active').map(m => ({
+   const [items, setItems] = useState<MedReceiptItem[]>(
+    mockMedications.map(m => ({
       medication: m, selected: false, addedQty: 0, action: [],
     }))
   );
@@ -112,7 +112,7 @@ const CreateReceiptPage: React.FC = () => {
   const [adjDayNames] = useState(['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส']);
 
   const step1Valid = dateReceived;
-  const selectedCount = items.filter(i => i.selected && (i.addedQty > 0 || i.action.includes('หยุดยา'))).length;
+  const selectedCount = items.filter(i => i.selected && (i.addedQty > 0 || i.action.includes('stopped'))).length;
 
   const updateItem = (medId: string, update: Partial<MedReceiptItem>) => {
     setItems(prev => prev.map(i => i.medication.id === medId ? { ...i, ...update } : i));
@@ -165,7 +165,7 @@ const CreateReceiptPage: React.FC = () => {
     
     setItems(prev => prev.map(item => {
       if (item.medication.id === stoppingMedId) {
-        const newAction = [...item.action.filter(a => a !== 'หยุดยา'), 'หยุดยา'];
+        const newAction = [...item.action.filter(a => a !== 'stopped'), 'stopped' as ReceiptAction];
         return { ...item, action: newAction, selected: true, addedQty: 0, reason: stopReason };
       }
       return item;
@@ -208,8 +208,9 @@ const CreateReceiptPage: React.FC = () => {
     setAdjTimings([...med.timings]);
     
     setAdjPrescribedBy(med.prescribedBy || '');
-    // For recreate, default to now. For adjust, keep original.
-    setAdjStartDate(isRecreate ? new Date().toISOString().slice(0, 16) : med.startDate);
+    // For recreate, default to now (local time). For adjust, keep original.
+    const nowLocal = new Date().toLocaleString('sv').replace(' ', 'T').slice(0, 16);
+    setAdjStartDate(isRecreate ? nowLocal : med.startDate);
     setAdjEndDate(med.endDate || '');
     setAdjCurrentAmount(med.currentAmount.toString());
     setAdjAlertDays(med.alertDays);
@@ -307,6 +308,7 @@ const CreateReceiptPage: React.FC = () => {
         alertDays: adjAlertDays,
         status: 'active', // Force active for re-created med
         expirationDate: adjExpirationDate || undefined,
+        instruction: adjInstruction || undefined,
       };
 
       const newItem: MedReceiptItem = {
@@ -529,7 +531,7 @@ const CreateReceiptPage: React.FC = () => {
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      {item.action.includes('หยุดยา') ? (
+                      {(item.action.includes('stopped') || item.medication.status === 'stopped') ? (
                         /* STOPPED CARD LAYOUT */
                         <div className="mt-1 space-y-1">
                           <div className="flex items-center justify-between">
@@ -543,10 +545,10 @@ const CreateReceiptPage: React.FC = () => {
                           
                           <div className="space-y-0.5 mt-2">
                             <p className="text-[11px] text-slate-500 font-medium">
-                              วันที่หยุดยา: {new Date().toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                              วันที่หยุดยา: {item.medication.stoppedDate ? new Date(item.medication.stoppedDate).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: '2-digit' }) : new Date().toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: '2-digit' })}
                             </p>
                             <p className="text-[11px] text-slate-500 font-medium">
-                              หยุดยาโดย: นางสายธาร นามา
+                              หยุดยาโดย: {item.medication.stoppedBy || 'นางสายธาร นามา'}
                             </p>
                             <p className="text-[11px] text-slate-500 font-medium">
                               คงเหลือเก่า : {item.medication.currentAmount} {item.medication.doseUnit}
@@ -609,39 +611,40 @@ const CreateReceiptPage: React.FC = () => {
                             <span className="text-slate-400 font-normal">คงเหลือใหม่: <span className="text-slate-500">{item.medication.currentAmount + item.addedQty} {item.medication.doseUnit}</span></span>
                           </div>
 
-                          {medTab === 'current' && (
-                            <div className="flex items-center justify-between mt-3.5">
-                              <button
-                                onClick={() => {
-                                  setStoppingMedId(item.medication.id);
-                                  setIsStopModalOpen(true);
-                                }}
-                                className="text-xs px-5 py-2 rounded-xl font-bold transition-all shadow-sm bg-red-50 text-red-500 hover:bg-red-100 active:scale-95">
-                                หยุดให้ยา
-                              </button>
-
-                              <div className="flex items-center gap-0 bg-[#f8fafc] rounded-xl border border-slate-200/60 p-0.5 shadow-sm">
-                                <button onClick={() => {
-                                  const newQty = Math.max(0, item.addedQty - 1);
-                                  const newAction = newQty > 0 
-                                    ? [...item.action.filter(a => a !== 'เพิ่มจำนวนยา'), 'เพิ่มจำนวนยา']
-                                    : item.action.filter(a => a !== 'เพิ่มจำนวนยา');
-                                  updateItem(item.medication.id, { addedQty: newQty, action: newAction, selected: newQty > 0 || newAction.length > 0 });
-                                }} className="h-9 w-9 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors">
-                                  <Minus className="h-4 w-4" />
-                                </button>
-                                <span className="text-[15px] font-black text-slate-800 w-10 text-center">{item.addedQty}</span>
-                                <button onClick={() => {
-                                  const newQty = item.addedQty + 1;
-                                  const newAction = [...item.action.filter(a => a !== 'เพิ่มจำนวนยา'), 'เพิ่มจำนวนยา'];
-                                  updateItem(item.medication.id, { addedQty: newQty, action: newAction, selected: true });
-                                }} className="h-9 w-9 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors">
-                                  <Plus className="h-4 w-4" />
-                                </button>
-                              </div>
-                            </div>
-                          )}
                         </>
+                      )}
+
+                      {medTab === 'current' && (
+                        <div className="flex items-center justify-between mt-3.5">
+                          <button
+                            onClick={() => {
+                              setStoppingMedId(item.medication.id);
+                              setIsStopModalOpen(true);
+                            }}
+                            className="text-xs px-5 py-2 rounded-xl font-bold transition-all shadow-sm bg-red-50 text-red-500 hover:bg-red-100 active:scale-95">
+                            หยุดให้ยา
+                          </button>
+
+                          <div className="flex items-center gap-0 bg-[#f8fafc] rounded-xl border border-slate-200/60 p-0.5 shadow-sm">
+                            <button onClick={() => {
+                              const newQty = Math.max(0, item.addedQty - 1);
+                              const newAction = newQty > 0 
+                                ? [...item.action.filter(a => a !== 'เพิ่มจำนวนยา'), 'เพิ่มจำนวนยา']
+                                : item.action.filter(a => a !== 'เพิ่มจำนวนยา');
+                              updateItem(item.medication.id, { addedQty: newQty, action: newAction, selected: newQty > 0 || newAction.length > 0 });
+                            }} className="h-9 w-9 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors">
+                              <Minus className="h-4 w-4" />
+                            </button>
+                            <span className="text-[15px] font-black text-slate-800 w-10 text-center">{item.addedQty}</span>
+                            <button onClick={() => {
+                              const newQty = item.addedQty + 1;
+                              const newAction = [...item.action.filter(a => a !== 'เพิ่มจำนวนยา'), 'เพิ่มจำนวนยา'];
+                              updateItem(item.medication.id, { addedQty: newQty, action: newAction, selected: true });
+                            }} className="h-9 w-9 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors">
+                              <Plus className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
                       )}
 
                       {medTab === 'stopped' && (
@@ -660,172 +663,174 @@ const CreateReceiptPage: React.FC = () => {
           </div>
         )}
 
-        {/* STEP 3 - Review */}
-        {step === 2 && (() => {
-          const selected = items.filter(i => i.selected);
-          // Sort actions so added_quantity is always last
-          const sortAction = (actions: string[] | ReceiptAction[]) => {
-            const casted = actions as string[];
-            const sorted = casted.filter(a => a !== 'added_quantity');
-            if (casted.includes('added_quantity')) sorted.push('added_quantity');
-            return sorted;
-          };
+            {/* STEP 3 - Review */}
+            {step === 2 && (() => {
+              const selected = items.filter(i => i.selected);
+              // Sort actions so added_quantity is always last
+              const sortAction = (actions: string[] | ReceiptAction[]) => {
+                const casted = actions as string[];
+                const sorted = casted.filter(a => a !== 'เพิ่มจำนวนยา');
+                if (casted.includes('เพิ่มจำนวนยา')) sorted.push('เพิ่มจำนวนยา');
+                return sorted;
+              };
 
-          // Group by action combination
-          type GroupKey = string;
-          const groups: Record<GroupKey, typeof selected> = {};
-          selected.forEach(item => {
-            const key = sortAction(item.action).join(',');
-            if (!groups[key]) groups[key] = [];
-            groups[key].push(item);
-          });
+              // Group by action combination
+              type GroupKey = string;
+              const groups: Record<GroupKey, typeof selected> = {};
+              selected.forEach(item => {
+                const key = sortAction(item.action).join(',');
+                if (!groups[key]) groups[key] = [];
+                groups[key].push(item);
+              });
 
-          // Action label map
-          const actionLabelMap: Record<string, string> = {
-            'new': 'รายการใหม่',
-            'added_quantity': 'เพิ่มจำนวนยา',
-            'edited': 'แก้ไขข้อมูล / วิธีการให้ยา',
-            'stopped': 'หยุดยา',
-          };
+              // Action label map - match the internal strings used in session
+              // Map: 'new' -> 'เพิ่มรายการยา', 'added_quantity' -> 'เพิ่มจำนวนยา', 'edited' -> 'แก้ไขข้อมูล/วิธีการให้ยา', 'stopped' -> 'หยุดยา'
+              const actionLabelMap: Record<string, string> = {
+                'new': 'รายการใหม่',
+                'เพิ่มจำนวนยา': 'เพิ่มจำนวนยา',
+                'edited': 'แก้ไขข้อมูล / วิธีการให้ยา',
+                'stopped': 'หยุดยา',
+              };
 
-          // Color for first action (left border)
-          const actionBorderColor = (firstAction: string) => {
-            switch (firstAction) {
-              case 'new': return 'border-l-primary';
-              case 'added_quantity': return 'border-l-med-success';
-              case 'edited': return 'border-l-med-warning';
-              case 'stopped': return 'border-l-destructive';
-              default: return 'border-l-primary';
-            }
-          };
+              const actionBorderColor = (firstAction: string) => {
+                switch (firstAction) {
+                  case 'new': return 'border-l-[#7c3aed]';
+                  case 'เพิ่มจำนวนยา': return 'border-l-[#2563eb]';
+                  case 'edited': return 'border-l-[#475569]';
+                  case 'stopped': return 'border-l-[#e11d48]';
+                  default: return 'border-l-[#7c3aed]';
+                }
+              };
 
-          const actionGroupColor = (firstAction: string) => {
-            switch (firstAction) {
-              case 'new': return 'text-primary';
-              case 'added_quantity': return 'text-med-success';
-              case 'edited': return 'text-[#0ea5e9]';
-              case 'stopped': return 'text-destructive';
-              default: return 'text-primary';
-            }
-          };
+              const actionGroupStyles = (firstAction: string) => {
+                switch (firstAction) {
+                  case 'new': return 'text-[#7c3aed]';
+                  case 'เพิ่มจำนวนยา': return 'text-[#1a8e89]';
+                  case 'edited': return 'text-[#475569]';
+                  case 'stopped': return 'text-[#e11d48]';
+                  default: return 'text-[#7c3aed]';
+                }
+              };
 
-          // Define group order
-          const groupOrder = ['new', 'edited', 'added_quantity', 'stopped'];
-          const sortedGroupKeys = Object.keys(groups).sort((a, b) => {
-            const aFirst = sortAction(a.split(','))[0];
-            const bFirst = sortAction(b.split(','))[0];
-            return groupOrder.indexOf(aFirst) - groupOrder.indexOf(bFirst);
-          });
+              // Define group order using internal labels
+              const groupOrder = ['new', 'เพิ่มจำนวนยา', 'edited', 'stopped'];
+              const sortedGroupKeys = Object.keys(groups).sort((a, b) => {
+                const aFirst = sortAction(a.split(','))[0];
+                const bFirst = sortAction(b.split(','))[0];
+                return groupOrder.indexOf(aFirst) - groupOrder.indexOf(bFirst);
+              });
 
-          return (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-foreground font-medium">รายการยาที่รับ</span>
-                <span className="font-bold text-foreground">{selected.length} รายการ</span>
-              </div>
+              return (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-foreground font-medium">รายการยาที่รับ</span>
+                    <span className="font-bold text-foreground">{selected.length} รายการ</span>
+                  </div>
 
-              {sortedGroupKeys.map(groupKey => {
-                const groupItems = groups[groupKey];
-                const actions = sortAction(groupKey.split(','));
-                const firstAction = actions[0];
-                const groupLabel = actions.map(a => actionLabelMap[a] || a).join(', ');
+                  {sortedGroupKeys.map(groupKey => {
+                    const groupItems = groups[groupKey];
+                    const actions = sortAction(groupKey.split(','));
+                    const firstAction = actions[0];
+                    const groupLabel = actions.map(a => actionLabelMap[a] || a).join(', ');
 
-                return (
-                  <div key={groupKey} className="space-y-3">
-                    {/* Group header */}
-                    <div className={`text-sm font-bold ${actionGroupColor(firstAction)} mb-3 flex items-center gap-1.5`}>
-                      <span className="capitalize">{groupLabel}</span>
-                      <span className="bg-current/10 px-1.5 py-0.5 rounded text-[10px]">({groupItems.length})</span>
-                    </div>
+                    return (
+                      <div key={groupKey} className="space-y-3">
+                        {/* Group header */}
+                        <div className={`px-1 py-1 text-sm font-bold ${actionGroupStyles(firstAction)} flex items-center gap-1`}>
+                          <span className="">{groupLabel}</span>
+                          <span className="">({groupItems.length})</span>
+                        </div>
 
-                    {groupItems.map(item => (
-                      <div className={`bg-card rounded-xl p-4 border border-border shadow-sm border-l-8 ${actionBorderColor(firstAction)}`}>
-                        <div className="flex items-start gap-4">
-                          <div className="h-20 w-20 rounded-lg bg-[#6a8a7c]/20 flex items-center justify-center flex-shrink-0 overflow-hidden relative shadow-inner">
-                            <div className="absolute inset-0 flex flex-col items-center justify-center opacity-40">
-                              <div className="w-8 h-10 border-2 border-teal-900 rounded-sm mb-1 translate-y-1"></div>
-                              <div className="w-10 h-10 border border-teal-900/30 rounded-sm rotate-12 absolute scale-110"></div>
-                            </div>
-                            <span className="relative z-10 text-[8px] font-bold text-teal-900/40 text-center px-1 leading-tight">
-                              MEDICATION<br/>BOTTLE<br/>IMAGE
-                            </span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-semibold text-foreground text-sm">
-                              {item.medication.name} {item.medication.strength}{item.medication.strengthUnit}
-                            </h4>
-                            <p className="text-xs text-muted-foreground">
-                              {item.medication.amountPerDose} {item.medication.doseUnit}/ครั้ง
-                            </p>
-
-                            {/* Status dot */}
-                            <div className="mt-1">
-                              <span className={`inline-block h-2 w-2 rounded-full ${item.action.includes('stopped') ? 'bg-destructive' : 'bg-[#22c55e]'}`} />
-                            </div>
-
-                            {/* Frequency */}
-                            <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
-                              <Calendar className="h-3 w-3" />
-                              <span>{item.medication.frequency === 'daily' ? 'ทุกวัน' : item.medication.frequency === 'prn' ? 'PRN' : 'ตามกำหนด'}</span>
-                            </div>
-
-                            {/* Timing chips */}
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {item.medication.timings.map(t => (
-                                <span key={t.id} className={`text-[10px] px-1.5 py-0.5 rounded-full ${chipColorMap[t.timeOfDay]} text-foreground`}>
-                                  {t.time && `${t.time} `}({TIME_OF_DAY_LABELS[t.timeOfDay]}, {FOOD_TIMING_LABELS[t.foodTiming]})
-                                </span>
-                              ))}
-                            </div>
-
-                            {/* Quantity info */}
-                            {item.addedQty > 0 && (
-                              <div className="mt-2 grid grid-cols-2 gap-y-1 text-xs">
-                                <span className="text-muted-foreground">รับมาเพิ่ม</span>
-                                <span className="text-foreground font-semibold text-right">+ {item.addedQty} {item.medication.doseUnit}</span>
-                                <span className="text-muted-foreground">คงเหลือหลังรับมา</span>
-                                <span className="text-foreground font-semibold text-right">{item.medication.currentAmount + item.addedQty} {item.medication.doseUnit}</span>
+                        {groupItems.map(item => (
+                          <div key={item.medication.id} className={`bg-card rounded-xl p-4 border border-border shadow-sm border-l-8 ${actionBorderColor(firstAction)}`}>
+                            <div className="flex items-start gap-4">
+                              <div className="h-20 w-20 rounded-lg bg-[#6a8a7c]/20 flex items-center justify-center flex-shrink-0 overflow-hidden relative shadow-inner">
+                                <div className="absolute inset-0 flex flex-col items-center justify-center opacity-40">
+                                  <div className="w-8 h-10 border-2 border-teal-900 rounded-sm mb-1 translate-y-1"></div>
+                                  <div className="w-10 h-10 border border-teal-900/30 rounded-sm rotate-12 absolute scale-110"></div>
+                                </div>
+                                {/* Status dot in bottom right of image container */}
+                                <div className={`absolute bottom-1 right-1 h-3.5 w-3.5 rounded-full border-2 border-white shadow-sm ${item.action.includes('stopped') || item.medication.status === 'stopped' ? 'bg-[#ef4444]' : 'bg-[#22c55e]'}`} />
                               </div>
-                            )}
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-bold text-[#7c3aed] text-base leading-tight">
+                                  {item.medication.name} {item.medication.strength}{item.medication.strengthUnit}
+                                </h4>
+                                <p className="text-[13px] font-bold text-slate-800 mt-1">
+                                  {item.medication.amountPerDose} {item.medication.doseUnit}/ครั้ง
+                                </p>
 
-                            {/* Stopped info */}
-                            {item.action.includes('หยุดยา') && (
-                              <div className="mt-2 text-xs text-muted-foreground">
-                                <p>วันที่หยุดยา: {new Date().toLocaleDateString('th-TH')}</p>
-                                <p>คงเหลือเก่า : {item.medication.currentAmount} {item.medication.doseUnit}</p>
-                                {item.reason && (
-                                  <div className="mt-1.5 p-2 bg-slate-50 rounded-lg border border-slate-100 italic text-slate-500 font-medium">
-                                    <span className="text-[10px] uppercase tracking-wider text-slate-400 block mb-0.5 not-italic">เหตุผลที่หยุดยา:</span>
-                                    {item.reason}
+                                {/* Frequency */}
+                                <div className="flex items-center gap-1.5 mt-2 text-[11px] text-teal-600 font-bold">
+                                  <Calendar className="h-3.5 w-3.5" />
+                                  <span>{item.medication.frequency === 'daily' ? 'ทุกวัน' : item.medication.frequency === 'prn' ? 'PRN' : 'ตามกำหนด'}</span>
+                                </div>
+
+                                {/* Timing description */}
+                                <div className="flex items-start gap-1.5 mt-1.5 text-[11px] text-slate-500 font-medium">
+                                  <svg className="w-3.5 h-3.5 text-slate-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                  <div className="flex flex-wrap gap-x-1.5 gap-y-0.5">
+                                    {item.medication.timings.map((t, idx) => (
+                                      <span key={t.id} className="whitespace-nowrap">
+                                        {t.time} ({TIME_OF_DAY_LABELS[t.timeOfDay]}, {FOOD_TIMING_LABELS[t.foodTiming]}){idx < item.medication.timings.length - 1 ? ',' : ''}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                {/* Quantity info */}
+                                {item.addedQty > 0 && (
+                                  <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col gap-1 text-[11px]">
+                                    <div className="flex justify-between items-center text-slate-400 font-bold">
+                                      <span className="uppercase tracking-wide">รับมาเพิ่ม</span>
+                                      <span className="text-[#1a8e89]">+ {item.addedQty} {item.medication.doseUnit}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-slate-400 font-bold">
+                                      <span className="uppercase tracking-wide">คงเหลือทั้งหมด</span>
+                                      <span className="text-slate-700">{item.medication.currentAmount + item.addedQty} {item.medication.doseUnit}</span>
+                                    </div>
                                   </div>
                                 )}
-                              </div>
-                            )}
 
-                            {/* Action badges - added_quantity always last */}
-                            <div className="flex flex-wrap gap-1 mt-2">
-                              {sortAction(item.action).map(a => (
-                                <span key={a} className={`text-[11px] px-2.5 py-1 rounded-full font-bold shadow-sm ${
-                                  a === 'stopped' ? 'bg-[#fff1f2] text-[#f43f5e] border border-[#ffe4e6]' :
-                                  a === 'added_quantity' ? 'bg-[#f0fdf4] text-[#22c55e] border border-[#dcfce7]' :
-                                  a === 'new' ? 'bg-[#f0f9ff] text-[#0ea5e9] border border-[#bae6fd]' :
-                                  'bg-[#fdf4ff] text-[#a855f7] border border-[#fae8ff]'
-                                }`}>{actionLabelMap[a] || a}</span>
-                              ))}
+                                {/* Stopped info */}
+                                {(item.action.includes('stopped') || item.medication.status === 'stopped') && (
+                                  <div className="mt-3 pt-3 border-t border-slate-100 space-y-1 text-[10px] text-slate-400 font-medium">
+                                    <p>วันที่หยุดยา: {item.medication.stoppedDate ? new Date(item.medication.stoppedDate).toLocaleDateString('th-TH') : new Date().toLocaleDateString('th-TH')}</p>
+                                    <p>หยุดยาโดย: {item.medication.stoppedBy || 'นางสายธาร นามา'}</p>
+                                    <p>คงเหลือเก่า : {item.medication.currentAmount} {item.medication.doseUnit}</p>
+                                    {item.reason && (
+                                      <div className="mt-2 p-2 bg-slate-50 rounded-lg border border-slate-100 italic">
+                                        <span className="text-[10px] uppercase tracking-wider text-slate-300 block mb-0.5 not-italic">เหตุผลที่หยุดยา:</span>
+                                        {item.reason}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Action badges - added_quantity always last */}
+                                <div className="flex flex-wrap gap-1 mt-2">
+                                  {sortAction(item.action).map(a => (
+                                    <span key={a} className={`text-[10px] px-3 py-1 rounded-full font-bold shadow-sm ${
+                                      a === 'stopped' ? 'bg-[#fff1f2] text-[#f43f5e] border border-[#ffe4e6]' :
+                                      a === 'เพิ่มจำนวนยา' ? 'bg-[#fdf4ff] text-[#d946ef] border border-[#fae8ff]' :
+                                      a === 'new' ? 'bg-[#f0f9ff] text-[#0ea5e9] border border-[#bae6fd]' :
+                                      'bg-[#fdf4ff] text-[#a855f7] border border-[#fae8ff]'
+                                    }`}>{actionLabelMap[a] || a}</span>
+                                  ))}
+                                </div>
+                              </div>
                             </div>
                           </div>
-                        </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                );
-              })}
+                    );
+                  })}
 
-              <div className="pt-4" />
-            </div>
-          );
-        })()}
-      </div>
+                  <div className="pt-4" />
+                </div>
+              );
+            })()}
+          </div>
         </div>
       </div>
       <BottomSheet open={showEmergencyContactSheet} onOpenChange={setShowEmergencyContactSheet} title="เพิ่มรายชื่อติดต่อฉุกเฉินใหม่">

@@ -57,28 +57,28 @@ const ReceiptDetailPage: React.FC = () => {
 
   const actionBorderColor = (firstAction: string) => {
     switch (firstAction) {
-      case 'new': return 'border-l-primary';
-      case 'added_quantity': return 'border-l-med-success';
-      case 'edited': return 'border-l-med-warning';
-      case 'stopped': return 'border-l-destructive';
-      default: return 'border-l-primary';
+      case 'new': return 'border-l-[#7c3aed]';
+      case 'added_quantity': return 'border-l-[#1a8e89]';
+      case 'edited': return 'border-l-[#475569]';
+      case 'stopped': return 'border-l-[#e11d48]';
+      default: return 'border-l-[#7c3aed]';
     }
   };
 
   const actionGroupColor = (firstAction: string) => {
     switch (firstAction) {
-      case 'new': return 'text-primary';
-      case 'added_quantity': return 'text-med-success';
-      case 'edited': return 'text-[#0ea5e9]';
-      case 'stopped': return 'text-destructive';
-      default: return 'text-primary';
+      case 'new': return 'text-[#7c3aed]';
+      case 'added_quantity': return 'text-[#1a8e89]';
+      case 'edited': return 'text-[#475569]';
+      case 'stopped': return 'text-[#e11d48]';
+      default: return 'text-[#7c3aed]';
     }
   };
 
   const actionLabelMap: Record<string, string> = {
     'new': 'รายการใหม่',
     'added_quantity': 'เพิ่มจำนวนยา',
-    'edited': 'แก้ไขข้อมูล/วิธีการให้ยา',
+    'edited': 'แก้ไขข้อมูล / วิธีการให้ยา',
     'stopped': 'หยุดยา',
   };
 
@@ -209,20 +209,20 @@ const ReceiptDetailPage: React.FC = () => {
             <div className="flex gap-3 mt-3">
               {receiptData.images && receiptData.images.length > 0 ? (
                 receiptData.images.map((img, idx) => (
-                  <div key={idx} className="h-20 w-20 rounded-2xl bg-slate-50 border border-slate-100 overflow-hidden shadow-sm">
+                  <div key={idx} className="h-16 w-16 rounded-2xl bg-slate-50 border border-slate-100 overflow-hidden shadow-sm">
                     <img src={img} alt="receipt" className="h-full w-full object-cover" />
                   </div>
                 ))
               ) : (
                 <>
-                  <div className="h-20 w-20 rounded-2xl bg-[#6a8a7c]/10 border border-[#6a8a7c]/20 flex items-center justify-center relative overflow-hidden">
-                     <div className="absolute inset-0 flex flex-col items-center justify-center opacity-20">
-                        <div className="w-10 h-12 border-2 border-teal-800 rounded-sm mb-1 translate-y-1"></div>
+                  <div className="h-16 w-16 rounded-2xl bg-[#f8fafc] border border-slate-200/60 flex items-center justify-center relative overflow-hidden">
+                     <div className="absolute inset-0 flex flex-col items-center justify-center opacity-10">
+                        <div className="w-8 h-10 border-2 border-slate-400 rounded-sm mb-1 translate-y-1"></div>
                      </div>
                   </div>
-                  <div className="h-20 w-20 rounded-2xl bg-[#6a8a7c]/10 border border-[#6a8a7c]/20 flex items-center justify-center relative overflow-hidden">
-                     <div className="absolute inset-0 flex flex-col items-center justify-center opacity-20">
-                        <div className="w-12 h-10 border-2 border-teal-800 rounded-sm mb-1 rotate-6"></div>
+                  <div className="h-16 w-16 rounded-2xl bg-[#f8fafc] border border-slate-200/60 flex items-center justify-center relative overflow-hidden">
+                     <div className="absolute inset-0 flex flex-col items-center justify-center opacity-10">
+                        <div className="w-10 h-8 border-2 border-slate-400 rounded-sm mb-1 rotate-6"></div>
                      </div>
                   </div>
                 </>
@@ -245,9 +245,9 @@ const ReceiptDetailPage: React.FC = () => {
 
           return (
             <div key={groupKey} className="space-y-4">
-              <div className={`text-sm font-bold ${actionGroupColor(firstAction)} flex items-center gap-1.5 px-1`}>
+              <div className={`text-sm font-bold ${actionGroupColor(firstAction)} flex items-center gap-1.5 px-0.5`}>
                 <span>{groupLabel}</span>
-                <span className="bg-current/10 px-1.5 py-0.5 rounded text-[10px]">({groupItems.length})</span>
+                <span className="">({groupItems.length})</span>
               </div>
 
               {groupItems.map(item => (
@@ -311,9 +311,9 @@ const ReceiptDetailPage: React.FC = () => {
 
                       <div className="flex flex-wrap gap-1.5 mt-4">
                         {sortAction(item.action).map(a => (
-                          <span key={a} className={`text-[11px] px-2.5 py-1 rounded-full font-bold shadow-sm ${
+                          <span key={a} className={`text-[10px] px-3 py-1 rounded-full font-bold shadow-sm ${
                             a === 'stopped' ? 'bg-[#fff1f2] text-[#f43f5e] border border-[#ffe4e6]' :
-                            a === 'added_quantity' ? 'bg-[#f0fdf4] text-[#22c55e] border border-[#dcfce7]' :
+                            a === 'added_quantity' ? 'bg-[#fdf4ff] text-[#d946ef] border border-[#fae8ff]' :
                             a === 'new' ? 'bg-[#f0f9ff] text-[#0ea5e9] border border-[#bae6fd]' :
                             'bg-[#fdf4ff] text-[#a855f7] border border-[#fae8ff]'
                           }`}>{actionLabelMap[a] || a}</span>
@@ -328,20 +328,19 @@ const ReceiptDetailPage: React.FC = () => {
         })}
 
         {/* CTAs */}
-        <div className="space-y-3 pt-6 pb-10">
+        <div className="space-y-4 pt-6 pb-12 flex flex-col items-center">
           <Button 
-            className="w-full h-14 rounded-2xl bg-teal-600 hover:bg-teal-700 text-white font-bold gap-3 shadow-lg shadow-teal-100" 
+            className="w-full h-14 rounded-2xl bg-[#1a8e89] hover:bg-[#167a75] text-white font-black text-base gap-3 shadow-lg shadow-teal-100 flex items-center justify-center transition-all active:scale-[0.98]" 
             onClick={() => setShareOpen(true)}
           >
             <Share2 className="h-5 w-5" /> รายงานการรับยา
           </Button>
-          <Button 
-            variant="outline" 
-            className="w-full h-14 rounded-2xl bg-[#eff3f8] border-0 text-slate-500 font-bold gap-3 hover:bg-slate-200"
+          <button 
+            className="text-slate-400 font-bold text-sm tracking-wide gap-2 hover:text-slate-600 transition-colors flex items-center justify-center py-2"
             onClick={() => setIsPdfPreviewOpen(true)}
           >
-            <Download className="h-5 w-5" /> ดาวน์โหลด pdf
-          </Button>
+            <Download className="h-4 w-4" /> ดาวน์โหลด pdf
+          </button>
         </div>
       </div>
 
